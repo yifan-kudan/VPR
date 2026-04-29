@@ -23,7 +23,6 @@ def convert_heic_to_jpeg(image_path: Path, output_path: Path, quality: int = 95)
         True if conversion was successful, False otherwise
     """
     try:
-        register_heif_opener()
         image = Image.open(image_path)
         
         # Convert RGBA to RGB if necessary (JPEG doesn't support transparency)
@@ -58,6 +57,8 @@ def convert_heic_folder_to_jpeg(input_folder: Path, output_folder: Path, quality
     dict
         Statistics about the conversion process
     """
+    register_heif_opener()
+
     input_folder = Path(input_folder)
     output_folder = Path(output_folder)
     
