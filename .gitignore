@@ -3,5 +3,5 @@
 *.png
 *.bmp
 *.HEIC
-retrieval/data/images_backup/
-__pycache__
+retrieval/data/
+**/__pycache__/
