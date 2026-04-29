@@ -1,0 +1,7 @@
+*.jpg
+*.jpeg
+*.png
+*.bmp
+*.HEIC
+retrieval/data/images_backup/
+__pycache__
