@@ -6,7 +6,7 @@ import pandas as pd
 # define the columns
 REQUIRED_COLUMNS = [
     "image",
-    "viewpoint",
+    "direction",
     "light",
     "weather",
     "indoor",
@@ -19,7 +19,7 @@ REQUIRED_COLUMNS = [
 class ImageRecord:
     image: Path
     place: int
-    viewpoint: str
+    direction: str
     light: str
     weather: str
     indoor: str
@@ -64,7 +64,7 @@ def row_to_record(row: pd.Series, project_root: Path) -> ImageRecord:
     return ImageRecord(
         image=resolve_image_path(str(row["image"]), project_root),
         place=int(row["place"]),
-        viewpoint=str(row["viewpoint"]),
+        direction=str(row["direction"]),
         light=str(row["light"]),
         weather=str(row["weather"]),
         indoor=str(row["indoor"]),

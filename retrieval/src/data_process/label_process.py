@@ -6,7 +6,7 @@ import pandas as pd
 # define all columns of the output CSV
 OUTPUT_COLUMNS = [
     "image",
-    "viewpoint",
+    "direction",
     "light",
     "weather",
     "indoor",
@@ -105,7 +105,7 @@ def refine_labels(
 
         # split the image groups and view points into list
         image_groups = split_groups(row["image"])
-        viewpoint_sequence = split_groups(row["viewpoint"])
+        direction_sequence = split_groups(row["direction"])
 
         # identify how many image groups are in one row, it indicate 
         # how many images are there for one place
@@ -115,21 +115,21 @@ def refine_labels(
         for group_index, image_group in enumerate(image_groups):
             existing_images = expand_existing_images(image_dir, image_group)
 
-            if len(existing_images) != len(viewpoint_sequence):
+            if len(existing_images) != len(direction_sequence):
                 errors.append(
                     f"row {place_index + 2}: image group '{image_group}' has "
-                    f"{len(existing_images)} existing images, but viewpoint has "
-                    f"{len(viewpoint_sequence)} values. Check the files in {image_dir}"
+                    f"{len(existing_images)} existing images, but direction has "
+                    f"{len(direction_sequence)} values. Check the files in {image_dir}"
                 )
                 continue
             
             # split the view point and link with the image
-            for (_, image_path), viewpoint in zip(existing_images, viewpoint_sequence):
+            for (_, image_path), direction in zip(existing_images, direction_sequence):
                 try:
                     refined_rows.append(
                         {
                             "image": project_relative_path(image_path, project_root),
-                            "viewpoint": viewpoint,
+                            "direction": direction,
 
                             # split the columns with multiple values
                             # especially for the day;night
