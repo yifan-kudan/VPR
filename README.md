@@ -1,5 +1,9 @@
 # VPR
 
+## Setup
+
+The environment requirement is provided in environment.yaml
+
 ## Retrieval
 
 ### Data Processing
