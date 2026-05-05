@@ -1,3 +1,5 @@
 **/__pycache__/
 retrieval/data/
+retrieval/results/
 external_repositories/
+.codex

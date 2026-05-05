@@ -33,3 +33,18 @@ There's no place label at first, but will be labeled according to scenario by `l
 image,direction,light,weather,indoor,construction,place
 VPR/retrieval/data/images/converted_jpeg/IMG_3735.jpg,forward,day,sun,indoor,none,0
 ```
+### ORB Matching
+
+### Evaluation
+
+The output will be saved into `VPR/retrieval/results/`
+
+Currently, the image pair of false matches will be saved into the `false_matches`
+
+## TODO:
+
+- More detailed output of the evaluation
+  - Confusion matrix
+  - Accuracy, Precision, Recall, F1-Score, CPU usage, Memory usage, Time consuming
+- Implement the SIFT + DBoW2
+- Implement the SuperPoint + NetVlad

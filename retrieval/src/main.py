@@ -1,21 +1,31 @@
-from matchers.orb_dbow2 import ORBDBoW2Matcher
-from retrieval.src.data_process.preprocess import preprocess_images
-from evaluation import evaluate
 from pathlib import Path
-def main() -> None:
-    # Example database and query images (replace with actual paths)
-    database_images = [Path("database/image1.jpg"), Path("database/image2.jpg")]
-    database_labels = ["label1", "label2"]
-    query_images = [Path("query/image1.jpg"), Path("query/image2.jpg")]
-    query_labels = ["label1", "label2"]
+from evaluation import evaluate_csv, print_false_matches, save_false_match_images
+from matchers.orb_dbow2 import ORBDBoW2Matcher
 
-    # Preprocess images (if needed)
-    preprocess_images(database_images + query_images)
+def main():
+    project_root = Path("/home/kudan/prj/VPR")
+    csv_path = project_root / "retrieval/data/images/converted_jpeg/labels_refined.csv"
 
-    # Initialize and build the matcher
-    matcher = ORBDBoW2Matcher(database_images, database_labels)
-    matcher.build()
+    matcher = ORBDBoW2Matcher()
 
-    # Evaluate the matcher
-    accuracy = evaluate(matcher, query_images, query_labels)
-    print(f"Accuracy: {accuracy:.2f}")
+    evaluation = evaluate_csv(
+        matcher,
+        csv_path,
+        project_root=project_root,
+        top_k=5,
+        show_progress=True,
+    )
+
+    print(f"Accuracy: {evaluation.accuracy:.4f}")
+    print_false_matches(evaluation)
+
+    saved_paths = save_false_match_images(
+        evaluation,
+        matcher,
+        project_root / "retrieval/results/false_matches",
+    )
+
+    print(f"Saved {len(saved_paths)} false match images")
+
+if __name__ == "__main__":
+    main()

@@ -3,39 +3,105 @@ import numpy as np
 import cv2 as cv
 from matplotlib import pyplot as plt
 from .matcher import ImageMatcher
-from data_loader import load_retrieval_dataset
+# from data_loader import load_retrieval_dataset
+from bindings import dbow2_cpp
 
-class ORBMatcher(ImageMatcher):
-    def __init__(self, nfeatures=1000, grid_size=(4, 4)):
+class ORBDBoW2Matcher(ImageMatcher):
+    def __init__(self, nfeatures=1000, grid_size=(4, 4), k=9, L=3, debug=False):
         self.nfeatures = nfeatures
         self.grid_size = grid_size
+        self.debug = debug
         self.orb = cv.ORB_create(nfeatures=nfeatures // (grid_size[0] * grid_size[1]))
-        self.reference_places = {}
+        self.reference_images = []
+        self.reference_places = []
+        self.db = dbow2_cpp.OrbDatabase(k=k, L=L)
+        self.is_built = False
 
-    def extract_features_descriptors(self, image: Path) -> tuple[np.ndarray, np.ndarray]:
+    def extract_features_descriptors(self, image: Path) -> tuple[list[cv.KeyPoint], np.ndarray | None]:
         img = cv.imread(image.as_posix(), cv.IMREAD_GRAYSCALE)
+
+        if img is None:
+            raise ValueError(f"Failed to read image: {image}")
 
         kp, des = self.get_tiled_keypoints(img, grid_size=self.grid_size, total_features=self.nfeatures)
 
-        # indicate the keypoints on the image for debugging
-        img2 = cv.drawKeypoints(img, kp, None, color=(0,255,0), flags=0)
-        plt.imshow(img2), plt.show()
+        if self.debug:
+            img2 = cv.drawKeypoints(img, kp, None, color=(0, 255, 0), flags=0)
+            plt.imshow(img2)
+            plt.show()
         
         return kp, des
     
     def match(self, query_image: Path) -> int:
         """Return the predicted place for a query image."""
-        return 0  # Placeholder implementation
+        if not self.is_built:
+            raise RuntimeError("Reference database has not been built. Call set_reference_database() first.")
+
+        _, descriptors = self.extract_features_descriptors(query_image)
+
+        if descriptors is None or descriptors.shape[0] == 0:
+            raise ValueError(f"No ORB descriptors found in query image: {query_image}")
+
+        results = self.db.query(descriptors, top_k=1)
+
+        if not results:
+            raise RuntimeError(f"DBoW2 returned no matches for query image: {query_image}")
+
+        best_reference_id, _score = results[0]
+        return self.reference_places[best_reference_id]
+
+    def query(self, query_image: Path, top_k: int = 5) -> list[tuple[int, int, float]]:
+        """Return ranked DBoW2 matches for a query image."""
+        if not self.is_built:
+            raise RuntimeError("Reference database has not been built. Call set_reference_database() first.")
+
+        _, descriptors = self.extract_features_descriptors(query_image)
+
+        if descriptors is None or descriptors.shape[0] == 0:
+            raise ValueError(f"No ORB descriptors found in query image: {query_image}")
+
+        results = self.db.query(descriptors, top_k=top_k)
+        return [
+            (
+                reference_id,
+                self.reference_places[reference_id],
+                score,
+            )
+            for reference_id, score in results
+        ]
     
     def set_reference_database(self, reference_images: list[Path], reference_places: list[int]) -> None:
         """Extract/index features for the reference images."""
+        descriptors_list = []
+        valid_images = []
+        valid_places = []
 
         for img, place in zip(reference_images, reference_places):
-            self.reference_places[place] = (img, self.extract_features_descriptors(img))
+            _, descriptors = self.extract_features_descriptors(img)
+
+            if descriptors is None or descriptors.shape[0] == 0:
+                print(f"Skipping reference image with no ORB descriptors: {img}")
+                continue
+
+            descriptors_list.append(descriptors)
+            valid_images.append(img)
+            valid_places.append(place)
+
+        if not descriptors_list:
+            raise ValueError("No reference images produced ORB descriptors.")
+
+        self.db.create_vocabulary(descriptors_list)
+
+        for descriptors in descriptors_list:
+            self.db.add(descriptors)
+
+        self.reference_images = valid_images
+        self.reference_places = valid_places
+        self.is_built = True
 
     # directly extract keypoints is not good enough
     # split the image into tiles, extract keypoints and descriptors for each tile, and combine them together
-    def get_tiled_keypoints(self, image: np.ndarray, grid_size: tuple[int, int]=(4, 4), total_features: int=1000) -> tuple[list, list]:
+    def get_tiled_keypoints(self, image: np.ndarray, grid_size: tuple[int, int]=(4, 4), total_features: int=1000) -> tuple[list[cv.KeyPoint], np.ndarray | None]:
         """Extract keypoints from the image and return them in a tiled format."""
         h, w = image.shape[:2]
         tile_h, tile_w = h // grid_size[0], w // grid_size[1]
@@ -62,20 +128,26 @@ class ORBMatcher(ImageMatcher):
         if not all_descriptors:
             return [], None
 
-        return all_keypoints, all_descriptors
+        return all_keypoints, np.vstack(all_descriptors)
 
-def main() -> None:
-    # setup the dataset root and load the dataset
-    project_root = Path(__file__).resolve().parents[4]
-    csv_path = project_root / "VPR" / "retrieval" / "data" / "images" / "converted_jpeg" / "labels_refined.csv"
-    dataset = load_retrieval_dataset(csv_path, project_root=project_root)
+# def main() -> None:
+#     # setup the dataset root and load the dataset
+#     project_root = Path(__file__).resolve().parents[4]
+#     csv_path = project_root / "VPR" / "retrieval" / "data" / "images" / "converted_jpeg" / "labels_refined.csv"
+#     dataset = load_retrieval_dataset(csv_path, project_root=project_root)
     
-    matcher = ORBMatcher()
+#     matcher = ORBDBoW2Matcher()
 
-    reference_image = dataset.references[10].image
-    print(f"Reference image: {reference_image}")
-    reference_places = [dataset.references[10].place]
-    matcher.set_reference_database([reference_image], reference_places)
+#     reference_image = dataset.references[10].image
 
-if __name__ == "__main__":
-    main()  
+#     # i = 1
+#     # for reference in dataset.references:
+#     #     print(f"Processing reference image: {reference.image}, {i}")
+#     #     i += 1
+
+#     print(f"Reference image: {reference_image}")
+#     reference_places = [dataset.references[10].place]
+#     matcher.set_reference_database([reference_image], reference_places)
+
+# if __name__ == "__main__":
+#     main()  
