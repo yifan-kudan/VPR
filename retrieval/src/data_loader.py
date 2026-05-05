@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -8,7 +6,7 @@ import pandas as pd
 # define the columns
 REQUIRED_COLUMNS = [
     "image",
-    "viewpoint",
+    "direction",
     "light",
     "weather",
     "indoor",
@@ -21,7 +19,7 @@ REQUIRED_COLUMNS = [
 class ImageRecord:
     image: Path
     place: int
-    viewpoint: str
+    direction: str
     light: str
     weather: str
     indoor: str
@@ -66,7 +64,7 @@ def row_to_record(row: pd.Series, project_root: Path) -> ImageRecord:
     return ImageRecord(
         image=resolve_image_path(str(row["image"]), project_root),
         place=int(row["place"]),
-        viewpoint=str(row["viewpoint"]),
+        direction=str(row["direction"]),
         light=str(row["light"]),
         weather=str(row["weather"]),
         indoor=str(row["indoor"]),
@@ -127,15 +125,16 @@ def load_retrieval_dataset(
     return RetrievalDataset(references=references, queries=queries)
 
 
-def main() -> None:
-    project_root = Path(__file__).resolve().parents[2]
-    csv_path = project_root / "retrieval" / "data" / "images" / "converted_jpeg" / "labels_refined.csv"
-    dataset = load_retrieval_dataset(csv_path, project_root=project_root)
+# def main() -> None:
+#     project_root = Path(__file__).resolve().parents[2]
+#     csv_path = project_root / "retrieval" / "data" / "images" / "converted_jpeg" / "labels_refined.csv"
+#     dataset = load_retrieval_dataset(csv_path, project_root=project_root)
 
-    print(f"References: {len(dataset.references)}")
-    print(f"Queries: {len(dataset.queries)}")
-    print(f"Places: {len(set(dataset.reference_places))}")
+#     print(f"References: {len(dataset.references)}")
+#     print("dataset references:", dataset.references)
+#     print(f"Queries: {len(dataset.queries)}")
+#     print(f"Places: {len(set(dataset.reference_places))}")
 
 
-if __name__ == "__main__":
-    main()
+# if __name__ == "__main__":
+#     main()

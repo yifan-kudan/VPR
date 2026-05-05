@@ -1,0 +1,25 @@
+from abc import ABC, abstractmethod
+from pathlib import Path
+import numpy as np
+
+
+class ImageMatcher(ABC):
+    @abstractmethod
+    def __init__(self, config) -> None:
+        """Initialize the matcher."""
+        pass
+
+    @abstractmethod
+    def extract_features_descriptors(self, image: Path) -> tuple[np.ndarray, np.ndarray]:
+        """Extract keypoints and descriptors from an image."""
+        pass
+
+    @abstractmethod
+    def match(self, query_image: Path) -> int:
+        """Return the predicted place for a query image."""
+        pass
+
+    @abstractmethod
+    def set_reference_database(self, reference_images: list[Path], reference_places: list[int]) -> list:
+        """Extract/index features for the reference images."""
+        pass
