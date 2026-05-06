@@ -7,7 +7,14 @@ from .matcher import ImageMatcher
 from bindings import dbow2_cpp
 
 class ORBDBoW2Matcher(ImageMatcher):
-    def __init__(self, nfeatures=1000, grid_size=(4, 4), k=9, L=3, debug=False, vocabulary_path: Path | None = None):
+    def __init__(self, nfeatures: int = 1000, grid_size: tuple[int, int] = (4, 4), k: int = 9, L: int = 3, debug: bool = False, vocabulary_path: Path | None = None):
+        """Initialize the ORB DBoW2 matcher."""
+        """nfeatures: total number of ORB features to extract per image (divided into 4x4 grid)"""
+        """grid_size: split the image into n x n grid"""
+        """k: number of branches at each node in the DBoW2 vocabulary tree"""
+        """L: depth of the DBoW2 vocabulary tree"""
+        """debug: only for debugging, show keypoints of a image"""
+        """vocabulary_path: pre-trained vocabulary path, if None, create a new one using reference images"""
         self.nfeatures = nfeatures
         self.grid_size = grid_size
         self.debug = debug
@@ -29,10 +36,10 @@ class ORBDBoW2Matcher(ImageMatcher):
         kps, dess = self.get_tiled_keypoints(img, grid_size=self.grid_size, total_features=self.nfeatures)
 
         # print the extracted keypoints in the image
-        if self.debug:
-            img2 = cv.drawKeypoints(img, kps, None, color=(0, 255, 0), flags=0)
-            plt.imshow(img2)
-            plt.show()
+        # if self.debug:
+        #     img2 = cv.drawKeypoints(img, kps, None, color=(0, 255, 0), flags=0)
+        #     plt.imshow(img2)
+        #     plt.show()
         
         return kps, dess
     

@@ -2,12 +2,16 @@ from pathlib import Path
 from data_loader import load_retrieval_dataset
 from evaluation import evaluate_csv, print_false_matches, save_false_match_images, save_confusion_matrix, save_match_details
 from matchers.orb_dbow2 import ORBDBoW2Matcher
+from matchers.sift_dbow2 import SiftDBoW2Matcher
+from matchers.superpoint_dbow2 import SuperPointDBoW2Matcher
 
 def main() -> None:
-    algorithm_name = "ORB"
+    # matching algorithm: "ORB", "SIFT", or "SUPERPOINT"
+    algorithm_name = "SUPERPOINT"
+
     # setup the pre-trained vocabulary path
     # if None, a new vocabulary will be created
-    # vocabulary_path = project_root / "retrieval/data/ORBvoc.txt" 
+    # vocabulary_path = project_root / "retrieval/data/ORBvoc.txt"
     vocabulary_path = None
     is_pretrained_vocabulary = vocabulary_path is not None
 
@@ -15,6 +19,7 @@ def main() -> None:
     top_k = 1 # number of top matches
 
     project_root = Path("/home/kudan/prj/VPR")
+
     csv_path = project_root / "retrieval/data/images/converted_jpeg/labels_refined.csv"
     false_match_image_dir = f"retrieval/results/false_matches_{algorithm_name}_{'' if not is_pretrained_vocabulary else 'pretrained'}_ref_{n_references}_top_{top_k}"
     match_details_dir = f"retrieval/results/match_details_{algorithm_name}_{'' if not is_pretrained_vocabulary else 'pretrained'}_ref_{n_references}_top_{top_k}.csv"
@@ -23,7 +28,14 @@ def main() -> None:
     dataset = load_retrieval_dataset(csv_path, project_root=project_root, n_references=n_references)
     image_records = {r.image: r for r in dataset.queries}
 
-    matcher = ORBDBoW2Matcher(vocabulary_path=vocabulary_path)
+    if algorithm_name == "ORB":
+        matcher = ORBDBoW2Matcher(vocabulary_path=vocabulary_path)
+    elif algorithm_name == "SIFT":
+        matcher = SiftDBoW2Matcher(vocabulary_path=vocabulary_path)
+    elif algorithm_name == "SUPERPOINT":
+        matcher = SuperPointDBoW2Matcher(vocabulary_path=vocabulary_path)
+    else:
+        raise ValueError(f"Unknown algorithm: {algorithm_name!r}. Choose 'ORB', 'SIFT', or 'SUPERPOINT'.")
 
     evaluation = evaluate_csv(
         matcher,

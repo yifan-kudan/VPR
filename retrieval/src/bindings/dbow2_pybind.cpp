@@ -40,22 +40,6 @@ static std::vector<cv::Mat> numpy_to_features(
     return features;
 }
 
-// SIFT descriptors: (N, 128) float32 → std::vector<std::vector<float>>
-static std::vector<std::vector<float>> numpy_to_sift_features(
-    py::array_t<float, py::array::c_style | py::array::forcecast> descriptors) {
-    auto buf = descriptors.request();
-    if (buf.ndim != 2 || buf.shape[1] != 128)
-        throw std::runtime_error("Input should be a 2D array with shape (N, 128)");
-
-    auto *ptr = static_cast<float *>(buf.ptr);
-    int rows = static_cast<int>(buf.shape[0]);
-
-    std::vector<std::vector<float>> features;
-    features.reserve(rows);
-    for (int i = 0; i < rows; ++i)
-        features.emplace_back(ptr + i * 128, ptr + (i + 1) * 128);
-    return features;
-}
 
 // ORB database
 class PyOrbDatabase {
@@ -126,6 +110,24 @@ class PyOrbDatabase {
         std::unique_ptr<OrbDatabase> database_;
 };
 
+
+// SIFT descriptors: (N, 128) float32 → std::vector<std::vector<float>>
+static std::vector<std::vector<float>> numpy_to_sift_features(
+    py::array_t<float, py::array::c_style | py::array::forcecast> descriptors) {
+    auto buf = descriptors.request();
+    if (buf.ndim != 2 || buf.shape[1] != 128)
+        throw std::runtime_error("Input should be a 2D array with shape (N, 128)");
+
+    auto *ptr = static_cast<float *>(buf.ptr);
+    int rows = static_cast<int>(buf.shape[0]);
+
+    std::vector<std::vector<float>> features;
+    features.reserve(rows);
+    for (int i = 0; i < rows; ++i)
+        features.emplace_back(ptr + i * 128, ptr + (i + 1) * 128);
+    return features;
+}
+
 // SIFT database
 class PySiftDatabase {
 public:
@@ -177,6 +179,75 @@ private:
     std::unique_ptr<SiftDatabase> database_;
 };
 
+
+// SuperPoint descriptors: (N, 256) float32 → std::vector<std::vector<float>>
+static std::vector<std::vector<float>> numpy_to_superpoint_features(
+    py::array_t<float, py::array::c_style | py::array::forcecast> descriptors) {
+    auto buf = descriptors.request();
+    if (buf.ndim != 2 || buf.shape[1] != 256)
+        throw std::runtime_error("Input should be a 2D array with shape (N, 256)");
+
+    auto *ptr = static_cast<float *>(buf.ptr);
+    int rows = static_cast<int>(buf.shape[0]);
+
+    std::vector<std::vector<float>> features;
+    features.reserve(rows);
+    for (int i = 0; i < rows; ++i)
+        features.emplace_back(ptr + i * 256, ptr + (i + 1) * 256);
+    return features;
+}
+
+// SuperPoint database
+class PySuperpointDatabase {
+public:
+    PySuperpointDatabase(int k = 10, int L = 6)
+        : vocabulary_(k, L, DBoW2::TF_IDF, DBoW2::L2_NORM), database_(nullptr) {}
+
+    void load_vocabulary(const std::string &path) {
+        SuperpointVocabulary voc;
+        if(path.size() >= 4 && path.substr(path.size() - 4) == ".txt")
+            voc.loadFromTextFile(path);
+        else
+            voc.load(path);
+        vocabulary_ = voc;
+        database_ = std::make_unique<SuperpointDatabase>(vocabulary_, false, 0);
+    }
+
+    void create_vocabulary(
+        const std::vector<py::array_t<float, py::array::c_style | py::array::forcecast>> &descriptors_list) {
+        std::vector<std::vector<std::vector<float>>> all_features;
+        all_features.reserve(descriptors_list.size());
+        for (const auto &d : descriptors_list)
+            all_features.push_back(numpy_to_superpoint_features(d));
+        vocabulary_.create(all_features);
+        database_ = std::make_unique<SuperpointDatabase>(vocabulary_, false, 0);
+    }
+
+    int add(py::array_t<float, py::array::c_style | py::array::forcecast> descriptors) {
+        if (!database_) throw std::runtime_error("Vocabulary must be created before adding features to the database.");
+        return database_->add(numpy_to_superpoint_features(descriptors));
+    }
+
+    std::vector<std::pair<int, double>> query(
+        py::array_t<float, py::array::c_style | py::array::forcecast> descriptors, int top_k = 1) {
+        if (!database_) throw std::runtime_error("Vocabulary must be created before querying the database.");
+        DBoW2::QueryResults results;
+        database_->query(numpy_to_superpoint_features(descriptors), results, top_k);
+        std::vector<std::pair<int, double>> output;
+        for (const auto &r : results) output.emplace_back(r.Id, r.Score);
+        return output;
+    }
+
+    void save(const std::string &path) {
+        if (!database_) throw std::runtime_error("Vocabulary must be created before saving the database.");
+        database_->save(path);
+    }
+
+private:
+    SuperpointVocabulary vocabulary_;
+    std::unique_ptr<SuperpointDatabase> database_;
+};
+
 PYBIND11_MODULE(dbow2_cpp, m) {
     py::class_<PyOrbDatabase>(m, "OrbDatabase")
         .def(py::init<int, int>(), py::arg("k") = 9, py::arg("L") = 3)
@@ -193,4 +264,12 @@ PYBIND11_MODULE(dbow2_cpp, m) {
         .def("add", &PySiftDatabase::add, py::arg("descriptors"))
         .def("query", &PySiftDatabase::query, py::arg("descriptors"), py::arg("top_k") = 1)
         .def("save", &PySiftDatabase::save, py::arg("path"));
+
+    py::class_<PySuperpointDatabase>(m, "SuperpointDatabase")
+        .def(py::init<int, int>(), py::arg("k") = 10, py::arg("L") = 6)
+        .def("load_vocabulary", &PySuperpointDatabase::load_vocabulary, py::arg("path"))
+        .def("create_vocabulary", &PySuperpointDatabase::create_vocabulary, py::arg("descriptors_list"))
+        .def("add", &PySuperpointDatabase::add, py::arg("descriptors"))
+        .def("query", &PySuperpointDatabase::query, py::arg("descriptors"), py::arg("top_k") = 1)
+        .def("save", &PySuperpointDatabase::save, py::arg("path"));
 }
