@@ -7,13 +7,16 @@ from .matcher import ImageMatcher
 from bindings import dbow2_cpp
 
 class ORBDBoW2Matcher(ImageMatcher):
-    def __init__(self, nfeatures=1000, grid_size=(4, 4), k=9, L=3, debug=False):
+    def __init__(self, nfeatures=1000, grid_size=(4, 4), k=9, L=3, debug=False, vocabulary_path: Path | None = None):
         self.nfeatures = nfeatures
         self.grid_size = grid_size
         self.debug = debug
+        self.vocabulary_path = Path(vocabulary_path) if vocabulary_path is not None else None
+
         self.orb = cv.ORB_create(nfeatures=nfeatures // (grid_size[0] * grid_size[1]))
         self.reference_images = []
         self.reference_places = []
+
         self.db = dbow2_cpp.OrbDatabase(k=k, L=L)
         self.is_built = False
 
@@ -23,14 +26,15 @@ class ORBDBoW2Matcher(ImageMatcher):
         if img is None:
             raise ValueError(f"Failed to read image: {image}")
 
-        kp, des = self.get_tiled_keypoints(img, grid_size=self.grid_size, total_features=self.nfeatures)
+        kps, dess = self.get_tiled_keypoints(img, grid_size=self.grid_size, total_features=self.nfeatures)
 
+        # print the extracted keypoints in the image
         if self.debug:
-            img2 = cv.drawKeypoints(img, kp, None, color=(0, 255, 0), flags=0)
+            img2 = cv.drawKeypoints(img, kps, None, color=(0, 255, 0), flags=0)
             plt.imshow(img2)
             plt.show()
         
-        return kp, des
+        return kps, dess
     
     def match(self, query_image: Path) -> int:
         """Return the predicted place for a query image."""
@@ -90,7 +94,13 @@ class ORBDBoW2Matcher(ImageMatcher):
         if not descriptors_list:
             raise ValueError("No reference images produced ORB descriptors.")
 
-        self.db.create_vocabulary(descriptors_list)
+        # check if use the pre-trained vocabulary
+        if self.vocabulary_path is not None:
+            print(f"Loading pre-trained vocabulary from {self.vocabulary_path}")
+            self.db.load_vocabulary(str(self.vocabulary_path))
+        else:
+            print("Creating new vocabulary from reference images.")
+            self.db.create_vocabulary(descriptors_list)
 
         for descriptors in descriptors_list:
             self.db.add(descriptors)
@@ -114,16 +124,18 @@ class ORBDBoW2Matcher(ImageMatcher):
             for j in range(grid_size[1]):
                 y1, y2 = i * tile_h, (i + 1) * tile_h
                 x1, x2 = j * tile_w, (j + 1) * tile_w
+
+                # split the image
                 tile = image[y1:y2, x1:x2]
 
-                kp, des = self.orb.detectAndCompute(tile, None)
-
-                for k in kp:
+                # assign the keypoints for each tile of the image
+                kps, dess = self.orb.detectAndCompute(tile, None)
+                for k in kps:
                     k.pt = (k.pt[0] + x1, k.pt[1] + y1)
                     all_keypoints.append(k)
                 
-                if des is not None:
-                    all_descriptors.append(des)
+                if dess is not None:
+                    all_descriptors.append(dess)
         
         if not all_descriptors:
             return [], None
