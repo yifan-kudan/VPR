@@ -35,6 +35,12 @@ VPR/retrieval/data/images/converted_jpeg/IMG_3735.jpg,forward,day,sun,indoor,non
 ```
 ### ORB Matching
 
+### DBoW2
+
+DBoW2 is realised by combining C++ library. The based repository is located at `VPR/external_repositories/DBoW2`
+
+`VPR/retrieval/bindings/dbow2_pybind.cpp` is the binding to allow pyhton call the C++ functions.
+
 ### Evaluation
 
 The output will be saved into `VPR/retrieval/results/`

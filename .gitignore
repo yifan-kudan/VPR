@@ -2,4 +2,6 @@
 retrieval/data/
 retrieval/results/
 external_repositories/
+retrieval/bindings/build-*/
+retrieval/bindings/*.so
 .codex
