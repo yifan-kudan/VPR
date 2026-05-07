@@ -17,9 +17,7 @@ class SiftDBoW2Matcher(ImageMatcher):
         """descriptor: type of SIFT descriptor to use"""
         """k: number of branches at each node in the DBoW2 vocabulary tree"""
         """L: depth of the DBoW2 vocabulary tree"""
-        """debug: only for debugging, show keypoints of a image"""
         """vocabulary_path: pre-trained vocabulary path, if None, create a new one using reference images"""
-        self.debug = debug
         self.vocabulary_path = Path(vocabulary_path) if vocabulary_path is not None else None
         self.reference_images = []
         self.reference_places = []
@@ -52,32 +50,18 @@ class SiftDBoW2Matcher(ImageMatcher):
             for (x, y), s, a in zip(kp_xy, scales, oris)
         ]
 
-        # if self.debug:
-        #     img_dbg = cv.drawKeypoints(img, keypoints, None, color=(0, 255, 0), flags=0)
-        #     plt.imshow(img_dbg, cmap="gray")
-        #     plt.show()
+        # img_dbg = cv.drawKeypoints(img, keypoints, None, color=(0, 255, 0), flags=0)
+        # plt.imshow(img_dbg, cmap="gray")
+        # plt.show()
 
         if len(descriptors) == 0:
             return keypoints, None
         return keypoints, descriptors.astype(np.float32)
 
-    def match(self, query_image: Path) -> int:
+    def match(self, query_image: Path, potential_places: list[int]) -> int:
         """Return the predicted place for a query image."""
-        if not self.is_built:
-            raise RuntimeError("Reference database has not been built. Call set_reference_database() first.")
-
-        _, descriptors = self.extract_features_descriptors(query_image)
-
-        if descriptors is None or descriptors.shape[0] == 0:
-            raise ValueError(f"No SIFT descriptors found in query image: {query_image}")
-
-        results = self.db.query(descriptors, top_k=1)
-
-        if not results:
-            raise RuntimeError(f"DBoW2 returned no matches for query image: {query_image}")
-
-        best_reference_id, _score = results[0]
-        return self.reference_places[best_reference_id]
+        # TODO: implement matching method considering retrieval results
+        pass
 
     def query(self, query_image: Path, top_k: int = 5) -> list[tuple[int, int, float]]:
         """Return ranked DBoW2 matches for a query image."""

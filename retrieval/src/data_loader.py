@@ -122,6 +122,8 @@ def load_retrieval_dataset(
     for _, place_df in df.groupby("place", sort=True):
         place_records = [row_to_record(row, project_root) for _, row in place_df.iterrows()]
 
+        # if total images for one place is less or equal to reference number,
+        # prevent this place from having query images for fair evaluation
         if len(place_records) <= n_references:
             references.extend(place_records)
         else:

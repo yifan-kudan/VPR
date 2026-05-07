@@ -15,8 +15,13 @@ class ImageMatcher(ABC):
         pass
 
     @abstractmethod
-    def match(self, query_image: Path) -> int:
+    def match(self, query_image: Path, potential_places: list[int]) -> int:
         """Return the predicted place for a query image."""
+        pass
+
+    @abstractmethod
+    def query(self, query_image: Path, top_k: int = 5) -> list[tuple[int, int, float]]:
+        """Return ranked DBoW2 matches for a query image."""
         pass
 
     @abstractmethod

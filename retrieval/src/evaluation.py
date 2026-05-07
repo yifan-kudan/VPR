@@ -32,12 +32,10 @@ class EvaluationResult:
 
 
 def query_matcher(matcher, query_image: Path, top_k: int) -> tuple[Any, list[RankedMatch]]:
-    if hasattr(matcher, "query"):
-        ranked_matches = matcher.query(query_image, top_k=top_k)
-        predicted_place = ranked_matches[0][1] if ranked_matches else None
-        return predicted_place, ranked_matches
 
-    return matcher.match(query_image), []
+    ranked_matches = matcher.query(query_image, top_k=top_k)
+    predicted_place = ranked_matches[0][1] if ranked_matches else None
+    return predicted_place, ranked_matches
 
 
 def matched_reference_image(matcher, ranked_matches: list[RankedMatch]) -> Path | None:
@@ -82,8 +80,8 @@ def evaluate(
     accuracy = accuracy_calculation(results)
     return EvaluationResult(accuracy=accuracy, results=results)
 
-
-def evaluate_dataset(
+# Initialize the matcher with reference images
+def preparing_dataset(
     matcher,
     dataset: RetrievalDataset,
     top_k: int = 5,
@@ -97,8 +95,8 @@ def evaluate_dataset(
         top_k=top_k
     )
 
-
-def evaluate_csv(
+# Setup the dataset and matcher
+def evaluate_setup(
     matcher,
     csv_path: str | Path,
     project_root: str | Path | None = None,
@@ -113,7 +111,7 @@ def evaluate_csv(
         validate_files=validate_files,
         n_references=n_references,
     )
-    return evaluate_dataset(matcher, dataset, top_k=top_k)
+    return preparing_dataset(matcher, dataset, top_k=top_k)
 
 
 def print_false_matches(evaluation: EvaluationResult) -> None:

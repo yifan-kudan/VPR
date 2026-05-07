@@ -11,17 +11,16 @@ from hloc.extractors.superpoint import SuperPoint
 
 
 class SuperPointDBoW2Matcher(ImageMatcher):
-    def __init__(self, nfeatures=1000, k=9, L=3, debug=False, vocabulary_path: Path | None = None,
+    def __init__(self, nfeatures=1000, k=9, L=3, vocabulary_path: Path | None = None,
                  keypoint_threshold: float = 0.005, nms_radius: int = 4, resize_max: int = 1024):
         """Initialize the SuperPoint DBoW2 matcher."""
         """nfeatures: total number of SuperPoint features to extract per image"""
         """k: number of branches at each node in the DBoW2 vocabulary tree"""
         """L: depth of the DBoW2 vocabulary tree"""
-        """debug: only for debugging, show keypoints of a image"""
         """vocabulary_path: pre-trained vocabulary path, if None, create a new one using reference images"""
         """keypoint_threshold: SuperPoint keypoint confidence threshold"""
         """nms_radius: Non-Maximum Suppression radius"""
-        self.debug = debug
+        """resize_max: maximum size for the longest side of the image (to avoid GPU OOM)"""
         self.vocabulary_path = Path(vocabulary_path) if vocabulary_path is not None else None
         self.resize_max = resize_max
         self.reference_images = []
@@ -72,32 +71,14 @@ class SuperPointDBoW2Matcher(ImageMatcher):
             for (x, y), s in zip(kp_xy, scores)
         ]
 
-        # if self.debug:
-        #     img_dbg = cv.drawKeypoints(img, keypoints, None, color=(0, 255, 0), flags=0)
-        #     plt.imshow(img_dbg, cmap="gray")
-        #     plt.show()
-
         if len(descriptors) == 0:
             return keypoints, None
         return keypoints, descriptors.astype(np.float32)
 
-    def match(self, query_image: Path) -> int:
+    def match(self, query_image: Path, potential_places: list[int]) -> int:
         """Return the predicted place for a query image."""
-        if not self.is_built:
-            raise RuntimeError("Reference database has not been built. Call set_reference_database() first.")
-
-        _, descriptors = self.extract_features_descriptors(query_image)
-
-        if descriptors is None or descriptors.shape[0] == 0:
-            raise ValueError(f"No SuperPoint descriptors found in query image: {query_image}")
-
-        results = self.db.query(descriptors, top_k=1)
-
-        if not results:
-            raise RuntimeError(f"DBoW2 returned no matches for query image: {query_image}")
-
-        best_reference_id, _score = results[0]
-        return self.reference_places[best_reference_id]
+        # TODO: implement matching method considering retrieval results
+        pass
 
     def query(self, query_image: Path, top_k: int = 5) -> list[tuple[int, int, float]]:
         """Return ranked DBoW2 matches for a query image."""

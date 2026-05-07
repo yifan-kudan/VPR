@@ -1,13 +1,13 @@
 from pathlib import Path
 from data_loader import load_retrieval_dataset
-from evaluation import evaluate_csv, print_false_matches, save_false_match_images, save_confusion_matrix, save_match_details
+from evaluation import evaluate_setup, print_false_matches, save_false_match_images, save_confusion_matrix, save_match_details
 from matchers.orb_dbow2 import ORBDBoW2Matcher
 from matchers.sift_dbow2 import SiftDBoW2Matcher
 from matchers.superpoint_dbow2 import SuperPointDBoW2Matcher
 
 def main() -> None:
     # matching algorithm: "ORB", "SIFT", or "SUPERPOINT"
-    algorithm_name = "SUPERPOINT"
+    algorithm_name = "SIFT"
 
     # setup the pre-trained vocabulary path
     # if None, a new vocabulary will be created
@@ -28,6 +28,7 @@ def main() -> None:
     dataset = load_retrieval_dataset(csv_path, project_root=project_root, n_references=n_references)
     image_records = {r.image: r for r in dataset.queries}
 
+    # initialize the matcher based on chosen algorithm
     if algorithm_name == "ORB":
         matcher = ORBDBoW2Matcher(vocabulary_path=vocabulary_path)
     elif algorithm_name == "SIFT":
@@ -37,7 +38,7 @@ def main() -> None:
     else:
         raise ValueError(f"Unknown algorithm: {algorithm_name!r}. Choose 'ORB', 'SIFT', or 'SUPERPOINT'.")
 
-    evaluation = evaluate_csv(
+    evaluation = evaluate_setup(
         matcher,
         csv_path,
         project_root=project_root,

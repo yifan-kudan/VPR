@@ -3,7 +3,6 @@ import numpy as np
 import cv2 as cv
 from matplotlib import pyplot as plt
 from .matcher import ImageMatcher
-# from data_loader import load_retrieval_dataset
 from bindings import dbow2_cpp
 
 class ORBDBoW2Matcher(ImageMatcher):
@@ -13,11 +12,9 @@ class ORBDBoW2Matcher(ImageMatcher):
         """grid_size: split the image into n x n grid"""
         """k: number of branches at each node in the DBoW2 vocabulary tree"""
         """L: depth of the DBoW2 vocabulary tree"""
-        """debug: only for debugging, show keypoints of a image"""
         """vocabulary_path: pre-trained vocabulary path, if None, create a new one using reference images"""
         self.nfeatures = nfeatures
         self.grid_size = grid_size
-        self.debug = debug
         self.vocabulary_path = Path(vocabulary_path) if vocabulary_path is not None else None
 
         self.orb = cv.ORB_create(nfeatures=nfeatures // (grid_size[0] * grid_size[1]))
@@ -29,37 +26,22 @@ class ORBDBoW2Matcher(ImageMatcher):
 
     def extract_features_descriptors(self, image: Path) -> tuple[list[cv.KeyPoint], np.ndarray | None]:
         img = cv.imread(image.as_posix(), cv.IMREAD_GRAYSCALE)
-
         if img is None:
             raise ValueError(f"Failed to read image: {image}")
 
         kps, dess = self.get_tiled_keypoints(img, grid_size=self.grid_size, total_features=self.nfeatures)
 
         # print the extracted keypoints in the image
-        # if self.debug:
-        #     img2 = cv.drawKeypoints(img, kps, None, color=(0, 255, 0), flags=0)
-        #     plt.imshow(img2)
-        #     plt.show()
+        # img2 = cv.drawKeypoints(img, kps, None, color=(0, 255, 0), flags=0)
+        # plt.imshow(img2)
+        # plt.show()
         
         return kps, dess
     
-    def match(self, query_image: Path) -> int:
+    def match(self, query_image: Path, potential_places: list[int]) -> int:
         """Return the predicted place for a query image."""
-        if not self.is_built:
-            raise RuntimeError("Reference database has not been built. Call set_reference_database() first.")
-
-        _, descriptors = self.extract_features_descriptors(query_image)
-
-        if descriptors is None or descriptors.shape[0] == 0:
-            raise ValueError(f"No ORB descriptors found in query image: {query_image}")
-
-        results = self.db.query(descriptors, top_k=1)
-
-        if not results:
-            raise RuntimeError(f"DBoW2 returned no matches for query image: {query_image}")
-
-        best_reference_id, _score = results[0]
-        return self.reference_places[best_reference_id]
+        # TODO: implement matching method considering retrieval results
+        pass
 
     def query(self, query_image: Path, top_k: int = 5) -> list[tuple[int, int, float]]:
         """Return ranked DBoW2 matches for a query image."""
@@ -116,7 +98,7 @@ class ORBDBoW2Matcher(ImageMatcher):
         self.reference_places = valid_places
         self.is_built = True
 
-    # directly extract keypoints is not good enough
+    # directly extract keypoints usually concentrated in a small region
     # split the image into tiles, extract keypoints and descriptors for each tile, and combine them together
     def get_tiled_keypoints(self, image: np.ndarray, grid_size: tuple[int, int]=(4, 4), total_features: int=1000) -> tuple[list[cv.KeyPoint], np.ndarray | None]:
         """Extract keypoints from the image and return them in a tiled format."""
@@ -136,13 +118,13 @@ class ORBDBoW2Matcher(ImageMatcher):
                 tile = image[y1:y2, x1:x2]
 
                 # assign the keypoints for each tile of the image
-                kps, dess = self.orb.detectAndCompute(tile, None)
-                for k in kps:
-                    k.pt = (k.pt[0] + x1, k.pt[1] + y1)
-                    all_keypoints.append(k)
+                sub_kp, sub_des = self.orb.detectAndCompute(tile, None)
+                for kp in sub_kp:
+                    kp.pt = (kp.pt[0] + x1, kp.pt[1] + y1) # pt coordinates of the keypoint [x,y]
+                    all_keypoints.append(kp)
                 
-                if dess is not None:
-                    all_descriptors.append(dess)
+                if sub_des is not None:
+                    all_descriptors.append(sub_des)
         
         if not all_descriptors:
             return [], None

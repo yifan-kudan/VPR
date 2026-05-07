@@ -35,6 +35,16 @@ VPR/retrieval/data/images/converted_jpeg/IMG_3735.jpg,forward,day,sun,indoor,non
 ```
 ### ORB Matching
 
+ORB matching method is realized based on opencv
+
+### SIFT Matching
+
+It is based on the DoG extractor repository<a href="https://github.com/cvg/Hierarchical-Localization/blob/master/hloc/extractors/dog.py">Hierarchical-Localization</a>
+
+### SuperPoint Matching
+
+It is based on the repository<a href="https://github.com/cvg/Hierarchical-Localization/blob/master/hloc/extractors/superpoint.py">Hierarchical-Localization</a> The SuperPoint uses a pre-trained model from <a herf="https://github.com/magicleap/SuperGluePretrainedNetwork/tree/ddcf11f42e7e0732a0c4607648f9448ea8d73590">SuperGluePretrainedNetwork</a>
+
 ### DBoW2
 
 DBoW2 is realised by combining C++ library. The based repository is located at `VPR/external_repositories/DBoW2`
@@ -50,7 +60,7 @@ Currently, the image pair of false matches will be saved into the `false_matches
 ## TODO:
 
 - More detailed output of the evaluation
-  - Confusion matrix
+  - <del>Confusion matrix</del>
   - Accuracy, Precision, Recall, F1-Score, CPU usage, Memory usage, Time consuming
-- Implement the SIFT + DBoW2
-- Implement the SuperPoint + NetVlad
+- <del>Implement the SIFT + DBoW2 + SueprPoint</del>
+- Implement the NetVlad
