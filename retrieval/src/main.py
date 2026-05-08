@@ -4,10 +4,15 @@ from evaluation import evaluate_setup, print_false_matches, save_false_match_ima
 from matchers.orb_dbow2 import ORBDBoW2Matcher
 from matchers.sift_dbow2 import SiftDBoW2Matcher
 from matchers.superpoint_dbow2 import SuperPointDBoW2Matcher
+from matchers.netvlad import NetVLADMatcher
 
 def main() -> None:
-    # matching algorithm: "ORB", "SIFT", or "SUPERPOINT"
-    algorithm_name = "SIFT"
+    # matching algorithm: "ORB", "SIFT", "SUPERPOINT", or "NetVLAD"
+    algorithm_name = "NetVLAD"
+
+    netvlad_config = {
+        "resize_max": 1024,
+    }
 
     # setup the pre-trained vocabulary path
     # if None, a new vocabulary will be created
@@ -35,8 +40,10 @@ def main() -> None:
         matcher = SiftDBoW2Matcher(vocabulary_path=vocabulary_path)
     elif algorithm_name == "SUPERPOINT":
         matcher = SuperPointDBoW2Matcher(vocabulary_path=vocabulary_path)
+    elif algorithm_name == "NetVLAD":
+        matcher = NetVLADMatcher(config=netvlad_config)
     else:
-        raise ValueError(f"Unknown algorithm: {algorithm_name!r}. Choose 'ORB', 'SIFT', or 'SUPERPOINT'.")
+        raise ValueError(f"Unknown algorithm: {algorithm_name!r}. Choose 'ORB', 'SIFT', 'SUPERPOINT', or 'NetVLAD'.")
 
     evaluation = evaluate_setup(
         matcher,
