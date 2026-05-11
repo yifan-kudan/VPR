@@ -3,11 +3,11 @@ import numpy as np
 import cv2 as cv
 import torch
 
-from .matcher import ImageMatcher
+from .matcher import GlobalDescriptorMatcher
 from hloc.extractors.netvlad import NetVLAD
 
 
-class NetVLADMatcher(ImageMatcher):
+class NetVLADMatcher(GlobalDescriptorMatcher):
     default_config = {
         "resize_max": 1024,
         "resize_force": False,
@@ -31,7 +31,7 @@ class NetVLADMatcher(ImageMatcher):
         self.reference_descriptors: np.ndarray | None = None  # (R, D), L2-normalized
         self.is_built = False
 
-    def extract_features_descriptors(self, image: Path) -> tuple[list, np.ndarray | None]:
+    def extract_features_descriptors(self, image: Path) -> tuple[list, np.ndarray]:
         img = cv.imread(str(image), cv.IMREAD_COLOR | cv.IMREAD_IGNORE_ORIENTATION)
         if img is None:
             raise ValueError(f"Failed to read image: {image}")

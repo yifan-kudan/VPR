@@ -2,6 +2,7 @@
 #include <pybind11/stl.h>
 #include <pybind11/numpy.h>
 
+#include <filesystem>
 #include <memory>
 #include <opencv2/core.hpp>
 #include <stdexcept>
@@ -12,7 +13,7 @@ namespace py = pybind11;
 
 // design a function to convert numpy arry to vector of cv::Mat
 // ORB descriptors are 32 bytes
-static std::vector<cv::Mat> numpy_to_features(
+static std::vector<cv::Mat> numpy_to_orb_features(
     py::array_t<unsigned char, py::array::c_style | py::array::forcecast> descriptors) {
     auto buf = descriptors.request();
     
@@ -29,7 +30,6 @@ static std::vector<cv::Mat> numpy_to_features(
     int cols = static_cast<int>(buf.shape[1]);
 
     cv::Mat mat(rows, cols, CV_8U, ptr);
-
     std::vector<cv::Mat> features;
     features.reserve(rows);
 
@@ -52,7 +52,7 @@ class PyOrbDatabase {
             all_features.reserve(descriptors_list.size());
 
             for (const auto &descriptors : descriptors_list) {
-                all_features.push_back(numpy_to_features(descriptors));
+                all_features.push_back(numpy_to_orb_features(descriptors));
             }
 
             vocabulary_.create(all_features);
@@ -64,7 +64,7 @@ class PyOrbDatabase {
                 throw std::runtime_error("Vocabulary must be created before adding features to the database.");
             }
 
-            auto features = numpy_to_features(descriptors);
+            auto features = numpy_to_orb_features(descriptors);
             return database_->add(features);
         }
 
@@ -74,11 +74,9 @@ class PyOrbDatabase {
                 throw std::runtime_error("Vocabulary must be created before querying the database.");
             }
 
-            auto features = numpy_to_features(descriptors);
-
+            auto features = numpy_to_orb_features(descriptors);
             DBoW2::QueryResults results;
             database_->query(features, results, top_k);
-
             std::vector<std::pair<int, double>> output;
 
             for (const auto &result : results) {
@@ -88,22 +86,35 @@ class PyOrbDatabase {
             return output;
         }
 
-        void load_vocabulary(const std::string &path) {
+        void load_vocabulary(const std::filesystem::path &path) {
             OrbVocabulary voc;
-            if(path.size() >= 4 && path.substr(path.size() - 4) == ".txt")
-                voc.loadFromTextFile(path);
-            else
-                voc.load(path);
-            vocabulary_ = voc;
+
+            try {
+                if (path.extension() == ".txt") {
+                    voc.loadFromTextFile(path.string());
+                } else {
+                    voc.load(path.string());
+                }
+            } catch (const std::string &e) {
+                throw std::runtime_error("Failed to load vocabulary: " + e);
+            } catch (const cv::Exception &e) {
+                throw std::runtime_error("Failed to load vocabulary: " + std::string(e.what()));
+            }
+
+            if (voc.empty()) {
+                throw std::runtime_error("Loaded vocabulary is empty: " + path.string());
+            }
+
+            vocabulary_ = std::move(voc);
             database_ = std::make_unique<OrbDatabase>(vocabulary_, false, 0);
         }
 
-        void save(const std::string &path) {
+        void save_database(const std::filesystem::path &path) {
             if (!database_) {
                 throw std::runtime_error("Vocabulary must be created before saving the database.");
             }
 
-            database_->save(path);
+            database_->save(path.string());
         }
     private:
         OrbVocabulary vocabulary_;
@@ -115,16 +126,19 @@ class PyOrbDatabase {
 static std::vector<std::vector<float>> numpy_to_sift_features(
     py::array_t<float, py::array::c_style | py::array::forcecast> descriptors) {
     auto buf = descriptors.request();
-    if (buf.ndim != 2 || buf.shape[1] != 128)
+    if (buf.ndim != 2 || buf.shape[1] != 128) {
         throw std::runtime_error("Input should be a 2D array with shape (N, 128)");
+    }
 
     auto *ptr = static_cast<float *>(buf.ptr);
     int rows = static_cast<int>(buf.shape[0]);
-
     std::vector<std::vector<float>> features;
     features.reserve(rows);
-    for (int i = 0; i < rows; ++i)
+
+    for (int i = 0; i < rows; ++i) {
         features.emplace_back(ptr + i * 128, ptr + (i + 1) * 128);
+    }
+
     return features;
 }
 
@@ -134,13 +148,26 @@ public:
     PySiftDatabase(int k = 10, int L = 6)
         : vocabulary_(k, L, DBoW2::TF_IDF, DBoW2::L2_NORM), database_(nullptr) {}
 
-    void load_vocabulary(const std::string &path) {
+    void load_vocabulary(const std::filesystem::path &path) {
         SiftVocabulary voc;
-        if(path.size() >= 4 && path.substr(path.size() - 4) == ".txt")
-            voc.loadFromTextFile(path);
-        else
-            voc.load(path);
-        vocabulary_ = voc;
+
+        try {
+            if (path.extension() == ".txt") {
+                voc.loadFromTextFile(path.string());
+            } else {
+                voc.load(path.string());
+            }
+        } catch (const std::string &e) {
+            throw std::runtime_error("Failed to load vocabulary: " + e);
+        } catch (const cv::Exception &e) {
+            throw std::runtime_error("Failed to load vocabulary: " + std::string(e.what()));
+        }
+
+        if (voc.empty()) {
+            throw std::runtime_error("Loaded vocabulary is empty: " + path.string());
+        }
+
+        vocabulary_ = std::move(voc);
         database_ = std::make_unique<SiftDatabase>(vocabulary_, false, 0);
     }
 
@@ -148,30 +175,46 @@ public:
         const std::vector<py::array_t<float, py::array::c_style | py::array::forcecast>> &descriptors_list) {
         std::vector<std::vector<std::vector<float>>> all_features;
         all_features.reserve(descriptors_list.size());
-        for (const auto &d : descriptors_list)
+
+        for (const auto &d : descriptors_list) {
             all_features.push_back(numpy_to_sift_features(d));
+        }
+
         vocabulary_.create(all_features);
         database_ = std::make_unique<SiftDatabase>(vocabulary_, false, 0);
     }
 
     int add(py::array_t<float, py::array::c_style | py::array::forcecast> descriptors) {
-        if (!database_) throw std::runtime_error("Vocabulary must be created before adding features to the database.");
+        if (!database_) { 
+            throw std::runtime_error("Vocabulary must be created before adding features to the database.");
+        }
+
         return database_->add(numpy_to_sift_features(descriptors));
     }
 
     std::vector<std::pair<int, double>> query(
         py::array_t<float, py::array::c_style | py::array::forcecast> descriptors, int top_k = 1) {
-        if (!database_) throw std::runtime_error("Vocabulary must be created before querying the database.");
+        if (!database_) { 
+            throw std::runtime_error("Vocabulary must be created before querying the database.");
+        }
+
         DBoW2::QueryResults results;
         database_->query(numpy_to_sift_features(descriptors), results, top_k);
         std::vector<std::pair<int, double>> output;
-        for (const auto &r : results) output.emplace_back(r.Id, r.Score);
+
+        for (const auto &r : results) {
+            output.emplace_back(r.Id, r.Score);
+        }
+
         return output;
     }
 
-    void save(const std::string &path) {
-        if (!database_) throw std::runtime_error("Vocabulary must be created before saving the database.");
-        database_->save(path);
+    void save_database(const std::filesystem::path &path) {
+        if (!database_) {
+            throw std::runtime_error("Vocabulary must be created before saving the database.");
+        }
+
+        database_->save(path.string());
     }
 
 private:
@@ -184,16 +227,20 @@ private:
 static std::vector<std::vector<float>> numpy_to_superpoint_features(
     py::array_t<float, py::array::c_style | py::array::forcecast> descriptors) {
     auto buf = descriptors.request();
-    if (buf.ndim != 2 || buf.shape[1] != 256)
+    
+    if (buf.ndim != 2 || buf.shape[1] != 256) {
         throw std::runtime_error("Input should be a 2D array with shape (N, 256)");
-
+    }
+    
     auto *ptr = static_cast<float *>(buf.ptr);
     int rows = static_cast<int>(buf.shape[0]);
-
     std::vector<std::vector<float>> features;
     features.reserve(rows);
-    for (int i = 0; i < rows; ++i)
+
+    for (int i = 0; i < rows; ++i) {
         features.emplace_back(ptr + i * 256, ptr + (i + 1) * 256);
+    }
+
     return features;
 }
 
@@ -203,13 +250,26 @@ public:
     PySuperpointDatabase(int k = 10, int L = 6)
         : vocabulary_(k, L, DBoW2::TF_IDF, DBoW2::L2_NORM), database_(nullptr) {}
 
-    void load_vocabulary(const std::string &path) {
+    void load_vocabulary(const std::filesystem::path &path) {
         SuperpointVocabulary voc;
-        if(path.size() >= 4 && path.substr(path.size() - 4) == ".txt")
-            voc.loadFromTextFile(path);
-        else
-            voc.load(path);
-        vocabulary_ = voc;
+
+        try {
+            if (path.extension() == ".txt") {
+                voc.loadFromTextFile(path.string());
+            } else {
+                voc.load(path.string());
+            }
+        } catch (const std::string &e) {
+            throw std::runtime_error("Failed to load vocabulary: " + e);
+        } catch (const cv::Exception &e) {
+            throw std::runtime_error("Failed to load vocabulary: " + std::string(e.what()));
+        }
+
+        if (voc.empty()) {
+            throw std::runtime_error("Loaded vocabulary is empty: " + path.string());
+        }
+
+        vocabulary_ = std::move(voc);
         database_ = std::make_unique<SuperpointDatabase>(vocabulary_, false, 0);
     }
 
@@ -217,30 +277,46 @@ public:
         const std::vector<py::array_t<float, py::array::c_style | py::array::forcecast>> &descriptors_list) {
         std::vector<std::vector<std::vector<float>>> all_features;
         all_features.reserve(descriptors_list.size());
-        for (const auto &d : descriptors_list)
+
+        for (const auto &d : descriptors_list) {
             all_features.push_back(numpy_to_superpoint_features(d));
+        }
+
         vocabulary_.create(all_features);
         database_ = std::make_unique<SuperpointDatabase>(vocabulary_, false, 0);
     }
 
     int add(py::array_t<float, py::array::c_style | py::array::forcecast> descriptors) {
-        if (!database_) throw std::runtime_error("Vocabulary must be created before adding features to the database.");
+        if (!database_) { 
+            throw std::runtime_error("Vocabulary must be created before adding features to the database.");
+        }
+
         return database_->add(numpy_to_superpoint_features(descriptors));
     }
 
     std::vector<std::pair<int, double>> query(
         py::array_t<float, py::array::c_style | py::array::forcecast> descriptors, int top_k = 1) {
-        if (!database_) throw std::runtime_error("Vocabulary must be created before querying the database.");
+        if (!database_) { 
+            throw std::runtime_error("Vocabulary must be created before querying the database.");
+        }
+
         DBoW2::QueryResults results;
         database_->query(numpy_to_superpoint_features(descriptors), results, top_k);
         std::vector<std::pair<int, double>> output;
-        for (const auto &r : results) output.emplace_back(r.Id, r.Score);
+
+        for (const auto &r : results) {
+            output.emplace_back(r.Id, r.Score);
+        }
+
         return output;
     }
 
-    void save(const std::string &path) {
-        if (!database_) throw std::runtime_error("Vocabulary must be created before saving the database.");
-        database_->save(path);
+    void save_database(const std::filesystem::path &path) {
+        if (!database_) {
+            throw std::runtime_error("Vocabulary must be created before saving the database.");
+        }
+
+        database_->save(path.string());
     }
 
 private:
@@ -255,7 +331,7 @@ PYBIND11_MODULE(dbow2_cpp, m) {
         .def("create_vocabulary", &PyOrbDatabase::create_vocabulary, py::arg("descriptors_list"))
         .def("add", &PyOrbDatabase::add, py::arg("descriptors"))
         .def("query", &PyOrbDatabase::query, py::arg("descriptors"), py::arg("top_k") = 1)
-        .def("save", &PyOrbDatabase::save, py::arg("path"));
+        .def("save_database", &PyOrbDatabase::save_database, py::arg("path"));
 
     py::class_<PySiftDatabase>(m, "SiftDatabase")
         .def(py::init<int, int>(), py::arg("k") = 10, py::arg("L") = 6)
@@ -263,7 +339,7 @@ PYBIND11_MODULE(dbow2_cpp, m) {
         .def("create_vocabulary", &PySiftDatabase::create_vocabulary, py::arg("descriptors_list"))
         .def("add", &PySiftDatabase::add, py::arg("descriptors"))
         .def("query", &PySiftDatabase::query, py::arg("descriptors"), py::arg("top_k") = 1)
-        .def("save", &PySiftDatabase::save, py::arg("path"));
+        .def("save_database", &PySiftDatabase::save_database, py::arg("path"));
 
     py::class_<PySuperpointDatabase>(m, "SuperpointDatabase")
         .def(py::init<int, int>(), py::arg("k") = 10, py::arg("L") = 6)
@@ -271,5 +347,5 @@ PYBIND11_MODULE(dbow2_cpp, m) {
         .def("create_vocabulary", &PySuperpointDatabase::create_vocabulary, py::arg("descriptors_list"))
         .def("add", &PySuperpointDatabase::add, py::arg("descriptors"))
         .def("query", &PySuperpointDatabase::query, py::arg("descriptors"), py::arg("top_k") = 1)
-        .def("save", &PySuperpointDatabase::save, py::arg("path"));
+        .def("save_database", &PySuperpointDatabase::save_database, py::arg("path"));
 }

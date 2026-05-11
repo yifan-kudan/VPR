@@ -7,7 +7,8 @@ import pandas as pd
 import cv2 as cv
 import matplotlib.pyplot as plt
 
-from data_loader import RetrievalDataset, ImageRecord, load_retrieval_dataset
+from data_loader import RetrievalDataset, ImageRecord
+from matchers.matcher import GlobalDescriptorMatcher, LocalFeatureMatcher
 
 from tqdm import tqdm
 
@@ -51,21 +52,23 @@ def accuracy_calculation(results: list[MatchResult]) -> float:
     return accuracy
 
 
-def evaluate(
+def evaluate_dataset(
     matcher,
-    query_images: list[Path],
-    query_places: list[Any],
+    dataset: RetrievalDataset,
     top_k: int = 5,
 ) -> EvaluationResult:
-    """Evaluate query images and record per-query retrieval results."""
+    """Build references from the dataset and evaluate its queries."""
+    matcher.set_reference_database(dataset.reference_images, dataset.reference_places)
+
     results = []
-    query_pairs = list(zip(query_images, query_places))
-
-    query_pairs = tqdm(query_pairs, desc="Matching queries", unit="image")
-
+    query_pairs = tqdm(
+        list(zip(dataset.query_images, dataset.query_places)),
+        desc="Matching queries",
+        unit="image",
+    )
+    
     for query_image, true_place in query_pairs:
         predicted_place, ranked_matches = query_matcher(matcher, query_image, top_k)
-
         results.append(
             MatchResult(
                 query_image=query_image,
@@ -77,41 +80,10 @@ def evaluate(
             )
         )
 
-    accuracy = accuracy_calculation(results)
-    return EvaluationResult(accuracy=accuracy, results=results)
-
-# Initialize the matcher with reference images
-def preparing_dataset(
-    matcher,
-    dataset: RetrievalDataset,
-    top_k: int = 5,
-) -> EvaluationResult:
-    """Build the matcher from dataset references and evaluate dataset queries."""
-    matcher.set_reference_database(dataset.reference_images, dataset.reference_places)
-    return evaluate(
-        matcher,
-        dataset.query_images,
-        dataset.query_places,
-        top_k=top_k
+    return EvaluationResult(
+        accuracy=accuracy_calculation(results),
+        results=results,
     )
-
-# Setup the dataset and matcher
-def evaluate_setup(
-    matcher,
-    csv_path: str | Path,
-    project_root: str | Path | None = None,
-    top_k: int = 5,
-    n_references: int = 1,
-    validate_files: bool = True,
-) -> EvaluationResult:
-    """Load a retrieval dataset CSV, build references, and evaluate queries."""
-    dataset = load_retrieval_dataset(
-        csv_path,
-        project_root=project_root,
-        validate_files=validate_files,
-        n_references=n_references,
-    )
-    return preparing_dataset(matcher, dataset, top_k=top_k)
 
 
 def print_false_matches(evaluation: EvaluationResult) -> None:
@@ -262,10 +234,10 @@ def save_confusion_matrix(
 
 def save_false_match_images(
     evaluation: EvaluationResult,
-    matcher,
+    matcher: LocalFeatureMatcher | GlobalDescriptorMatcher,
     output_dir: str | Path,
 ) -> list[Path]:
-    """Save each false query/reference pair as one side-by-side JPG with ORB keypoints."""
+    """Save each false query/reference pair as one side-by-side JPG with keypoints."""
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 

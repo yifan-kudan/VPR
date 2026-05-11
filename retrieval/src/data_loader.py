@@ -131,18 +131,3 @@ def load_retrieval_dataset(
             queries.extend(place_records[n_references:])
 
     return RetrievalDataset(references=references, queries=queries)
-
-
-# def main() -> None:
-#     project_root = Path(__file__).resolve().parents[2]
-#     csv_path = project_root / "retrieval" / "data" / "images" / "converted_jpeg" / "labels_refined.csv"
-#     dataset = load_retrieval_dataset(csv_path, project_root=project_root)
-
-#     print(f"References: {len(dataset.references)}")
-#     print("dataset references:", dataset.references)
-#     print(f"Queries: {len(dataset.queries)}")
-#     print(f"Places: {len(set(dataset.reference_places))}")
-
-
-# if __name__ == "__main__":
-#     main()

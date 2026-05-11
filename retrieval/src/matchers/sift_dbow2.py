@@ -2,16 +2,15 @@ from pathlib import Path
 import numpy as np
 import cv2 as cv
 import torch
-from matplotlib import pyplot as plt
-from .matcher import ImageMatcher
+from .dbow2_base import DBoW2MatcherBase
 from bindings import dbow2_cpp
 
 # import sift algorithm from hloc
 from hloc.extractors.dog import DoG
 
 
-class SiftDBoW2Matcher(ImageMatcher):
-    def __init__(self, nfeatures: int = 1000, descriptor: str = "rootsift", k: int = 9, L: int = 3, debug: bool = False, vocabulary_path: Path | None = None):
+class SiftDBoW2Matcher(DBoW2MatcherBase):
+    def __init__(self, nfeatures: int = 1000, descriptor: str = "rootsift", k: int = 9, L: int = 3, vocabulary_path: Path | None = None):
         """Initialize the SIFT DBoW2 matcher."""
         """nfeatures: total number of SIFT features to extract per image"""
         """descriptor: type of SIFT descriptor to use"""
@@ -21,7 +20,7 @@ class SiftDBoW2Matcher(ImageMatcher):
         self.vocabulary_path = Path(vocabulary_path) if vocabulary_path is not None else None
         self.reference_images = []
         self.reference_places = []
-
+        
         # init sift feature extractor
         self.dog = DoG({"max_keypoints": nfeatures, "descriptor": descriptor})
         self.dog.eval()
@@ -30,7 +29,8 @@ class SiftDBoW2Matcher(ImageMatcher):
         self.db = dbow2_cpp.SiftDatabase(k=k, L=L)
         self.is_built = False
 
-    def extract_features_descriptors(self, image: Path) -> tuple[np.ndarray, np.ndarray | None]:
+
+    def extract_features_descriptors(self, image: Path) -> tuple[list[cv.KeyPoint], np.ndarray | None]:
         img = cv.imread(image.as_posix(), cv.IMREAD_GRAYSCALE)
         if img is None:
             raise ValueError(f"Failed to read image: {image}")
@@ -50,65 +50,6 @@ class SiftDBoW2Matcher(ImageMatcher):
             for (x, y), s, a in zip(kp_xy, scales, oris)
         ]
 
-        # img_dbg = cv.drawKeypoints(img, keypoints, None, color=(0, 255, 0), flags=0)
-        # plt.imshow(img_dbg, cmap="gray")
-        # plt.show()
-
         if len(descriptors) == 0:
             return keypoints, None
         return keypoints, descriptors.astype(np.float32)
-
-    def match(self, query_image: Path, potential_places: list[int]) -> int:
-        """Return the predicted place for a query image."""
-        # TODO: implement matching method considering retrieval results
-        pass
-
-    def query(self, query_image: Path, top_k: int = 5) -> list[tuple[int, int, float]]:
-        """Return ranked DBoW2 matches for a query image."""
-        if not self.is_built:
-            raise RuntimeError("Reference database has not been built. Call set_reference_database() first.")
-
-        _, descriptors = self.extract_features_descriptors(query_image)
-
-        if descriptors is None or descriptors.shape[0] == 0:
-            raise ValueError(f"No SIFT descriptors found in query image: {query_image}")
-
-        results = self.db.query(descriptors, top_k=top_k)
-        return [
-            (reference_id, self.reference_places[reference_id], score)
-            for reference_id, score in results
-        ]
-
-    def set_reference_database(self, reference_images: list[Path], reference_places: list[int]) -> None:
-        """Extract/index features for the reference images."""
-        descriptors_list = []
-        valid_images = []
-        valid_places = []
-
-        for img, place in zip(reference_images, reference_places):
-            _, descriptors = self.extract_features_descriptors(img)
-
-            if descriptors is None or descriptors.shape[0] == 0:
-                print(f"Skipping reference image with no SIFT descriptors: {img}")
-                continue
-
-            descriptors_list.append(descriptors)
-            valid_images.append(img)
-            valid_places.append(place)
-
-        if not descriptors_list:
-            raise ValueError("No reference images produced SIFT descriptors.")
-
-        if self.vocabulary_path is not None:
-            print(f"Loading pre-trained vocabulary from {self.vocabulary_path}")
-            self.db.load_vocabulary(str(self.vocabulary_path))
-        else:
-            print("Creating new vocabulary from reference images.")
-            self.db.create_vocabulary(descriptors_list)
-
-        for descriptors in descriptors_list:
-            self.db.add(descriptors)
-
-        self.reference_images = valid_images
-        self.reference_places = valid_places
-        self.is_built = True
