@@ -10,11 +10,6 @@ class ImageMatcher(ABC):
         """Initialize the matcher."""
         pass
 
-    # @abstractmethod
-    # def extract_features_descriptors(self, image: Path) -> tuple[list[cv.KeyPoint] | None, np.ndarray | None]:
-    #     """Extract keypoints and descriptors from an image."""
-    #     pass
-
     @abstractmethod
     def match(self, query_image: Path, potential_places: list[int]) -> int:
         """Return the predicted place for a query image."""

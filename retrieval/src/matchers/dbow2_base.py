@@ -2,7 +2,7 @@ from pathlib import Path
 from .matcher import LocalFeatureMatcher
 
 class DBoW2MatcherBase(LocalFeatureMatcher):
-    feature_extractor = str
+    feature_extractor: str = None
 
     def __init__(self, db, vocabulary_path: Path | None = None):
         self.db = db
@@ -43,7 +43,7 @@ class DBoW2MatcherBase(LocalFeatureMatcher):
             valid_places.append(place)
         
         if not descriptors_list:
-            raise ValueError(f"No reference images produced {self.feature_name} descriptors.")
+            raise ValueError(f"No reference images produced {self.feature_extractor} descriptors.")
         
         if self.vocabulary_path is not None:
             print(f"Loading pre-trained vocabulary from {self.vocabulary_path}")
