@@ -1,2 +1,7 @@
 **/__pycache__/
 retrieval/data/
+retrieval/results/
+external_repositories/
+retrieval/src/bindings/build-*/
+retrieval/src/bindings/*.so
+.codex

@@ -1,8 +1,13 @@
-# VPR
+# Visual Place Recognition(VPR)
 
 ## Setup
 
-The environment requirement is provided in environment.yaml
+The environment requirement environment.yaml is created by conda. To setup the environment, run
+
+```bash
+conda env create -f environment.yaml
+conda activate img_matching
+```
 
 ## Retrieval
 
@@ -33,3 +38,45 @@ There's no place label at first, but will be labeled according to scenario by `l
 image,direction,light,weather,indoor,construction,place
 VPR/retrieval/data/images/converted_jpeg/IMG_3735.jpg,forward,day,sun,indoor,none,0
 ```
+### ORB Matching
+
+ORB matching method is realized based on opencv
+
+### SIFT Matching
+
+It is based on the DoG extractor repository<a href="https://github.com/cvg/Hierarchical-Localization/blob/master/hloc/extractors/dog.py">Hierarchical-Localization</a>
+
+### SuperPoint Matching
+
+It is based on the repository<a href="https://github.com/cvg/Hierarchical-Localization/blob/master/hloc/extractors/superpoint.py">Hierarchical-Localization</a> The SuperPoint uses a pre-trained model from <a herf="https://github.com/magicleap/SuperGluePretrainedNetwork/tree/ddcf11f42e7e0732a0c4607648f9448ea8d73590">SuperGluePretrainedNetwork</a>
+
+### NetVLAD Matching
+
+Based on the repository<a href="https://github.com/cvg/Hierarchical-Localization/blob/master/hloc/extractors/superpoint.py">Hierarchical-Localization</a> It is pretrained.
+
+### DBoW2
+
+DBoW2 is realised by combining C++ library. The based repository is located at `VPR/external_repositories/DBoW2`. Clone DBoW2 repository and place it under `VPR/external_repositories/`
+
+```bash
+cd external_repositories
+git clone https://github.com/dorian3d/DBoW2.git
+```
+
+`VPR/retrieval/bindings/dbow2_pybind.cpp` is the binding to allow pyhton call the C++ functions.
+
+### Evaluation
+
+The output will be saved into `VPR/retrieval/results/`
+
+Currently, the image pair of false matches will be saved into the `false_matches`
+
+And a jupyter notebook is provided for more convenient result analysis.
+
+## TODO:
+
+- More detailed output of the evaluation
+  - <del>Confusion matrix</del>
+  - Accuracy, Precision, Recall, F1-Score, CPU usage, Memory usage, Time consuming
+- <del>Implement the SIFT + DBoW2 + SueprPoint</del>
+- Implement the NetVlad

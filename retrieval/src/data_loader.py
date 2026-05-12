@@ -97,6 +97,7 @@ def load_retrieval_dataset(
     csv_path: str | Path,
     project_root: str | Path | None = None,
     validate_files: bool = True,
+    n_references: int = 1,
 ) -> RetrievalDataset:
     csv_path = Path(csv_path)
 
@@ -116,24 +117,17 @@ def load_retrieval_dataset(
     references = []
     queries = []
 
+    # add logic to allow change the number of reference images per place,
+    # the rest of images will be used as queries
     for _, place_df in df.groupby("place", sort=True):
         place_records = [row_to_record(row, project_root) for _, row in place_df.iterrows()]
 
-        references.append(place_records[0])
-        queries.extend(place_records[1:])
+        # if total images for one place is less or equal to reference number,
+        # prevent this place from having query images for fair evaluation
+        if len(place_records) <= n_references:
+            references.extend(place_records)
+        else:
+            references.extend(place_records[:n_references])
+            queries.extend(place_records[n_references:])
 
     return RetrievalDataset(references=references, queries=queries)
-
-
-def main() -> None:
-    project_root = Path(__file__).resolve().parents[2]
-    csv_path = project_root / "retrieval" / "data" / "images" / "converted_jpeg" / "labels_refined.csv"
-    dataset = load_retrieval_dataset(csv_path, project_root=project_root)
-
-    print(f"References: {len(dataset.references)}")
-    print(f"Queries: {len(dataset.queries)}")
-    print(f"Places: {len(set(dataset.reference_places))}")
-
-
-if __name__ == "__main__":
-    main()
