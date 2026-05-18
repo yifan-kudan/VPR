@@ -25,13 +25,10 @@ class SuperPointDBoW2Matcher(DBoW2MatcherBase):
         """keypoint_threshold: SuperPoint keypoint confidence threshold"""
         """nms_radius: Non-Maximum Suppression radius"""
         """resize_max: maximum size for the longest side of the image (to avoid GPU OOM)"""
-        self.vocabulary_path = Path(vocabulary_path) if vocabulary_path is not None else None
         self.resize_max = resize_max
         self.nfeatures = nfeatures
         self.keypoint_threshold = keypoint_threshold
         self.nms_radius = nms_radius
-        self.reference_images = []
-        self.reference_places = []
 
         # init superpoint feature extractor
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -43,9 +40,10 @@ class SuperPointDBoW2Matcher(DBoW2MatcherBase):
         }).to(self.device)
         self.superpoint.eval()
 
-        # setup DBoW2 database (256-d float descriptors)
-        self.db = dbow2_cpp.SuperpointDatabase(k=k, L=L)
-        self.is_built = False
+        super().__init__(
+            dbow2_cpp.SuperpointDatabase(k=k, L=L),
+            Path(vocabulary_path) if vocabulary_path is not None else None,
+        )
         self.superglue_verifier: SuperGlueVerifier | None = None
         self.superpoint_feature_cache: dict[Path, dict[str, torch.Tensor]] = {}
 
