@@ -1,10 +1,15 @@
 from pathlib import Path
+
 import numpy as np
 import cv2 as cv
+
 from .dbow2_base import DBoW2MatcherBase
 from bindings import dbow2_cpp
 
 class ORBDBoW2Matcher(DBoW2MatcherBase):
+    feature_extractor = "orb"
+    matcher_norm = cv.NORM_HAMMING
+
     def __init__(self, nfeatures: int = 1000, grid_size: tuple[int, int] = (4, 4), k: int = 9, L: int = 3, debug: bool = False, vocabulary_path: Path | None = None):
         """Initialize the ORB DBoW2 matcher."""
         """nfeatures: total number of ORB features to extract per image (divided into 4x4 grid)"""

@@ -1,7 +1,9 @@
 from pathlib import Path
+
 import numpy as np
 import cv2 as cv
 import torch
+
 from .dbow2_base import DBoW2MatcherBase
 from bindings import dbow2_cpp
 
@@ -10,6 +12,9 @@ from hloc.extractors.dog import DoG
 
 
 class SiftDBoW2Matcher(DBoW2MatcherBase):
+    feature_extractor = "sift"
+    matcher_norm = cv.NORM_L2
+
     def __init__(self, nfeatures: int = 1000, descriptor: str = "rootsift", k: int = 9, L: int = 3, vocabulary_path: Path | None = None):
         """Initialize the SIFT DBoW2 matcher."""
         """nfeatures: total number of SIFT features to extract per image"""

@@ -1,7 +1,7 @@
 **/__pycache__/
-retrieval/data/
-retrieval/results/
+image_matching/data/
+image_matching/results/
 external_repositories/
-retrieval/src/bindings/build-*/
-retrieval/src/bindings/*.so
+image_matching/src/bindings/build-*/
+image_matching/src/bindings/*.so
 .codex

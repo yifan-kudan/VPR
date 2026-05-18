@@ -1,11 +1,13 @@
 from pathlib import Path
+
 import numpy as np
 import cv2 as cv
 import torch
 
 from .matcher import GlobalDescriptorMatcher
-from hloc.extractors.netvlad import NetVLAD
+from .verification import RankedMatch, VerifiedMatch, SuperGlueVerifier, best_verified_match
 
+from hloc.extractors.netvlad import NetVLAD
 
 class NetVLADMatcher(GlobalDescriptorMatcher):
     default_config = {
@@ -29,6 +31,7 @@ class NetVLADMatcher(GlobalDescriptorMatcher):
         self.reference_images: list[Path] = []
         self.reference_places: list[int] = []
         self.reference_descriptors: np.ndarray | None = None  # (R, D), L2-normalized
+        self.superglue_verifier: SuperGlueVerifier | None = None
         self.is_built = False
 
     def extract_features_descriptors(self, image: Path) -> tuple[list, np.ndarray]:
@@ -78,7 +81,7 @@ class NetVLADMatcher(GlobalDescriptorMatcher):
         self.reference_places = valid_places
         self.is_built = True
 
-    def query(self, query_image: Path, top_k: int = 5) -> list[tuple[int, int, float]]:
+    def query(self, query_image: Path, top_k: int = 5) -> list[RankedMatch]:
         """Return ranked NetVLAD matches for a query image."""
         if not self.is_built:
             raise RuntimeError("Reference database has not been built. Call set_reference_database() first.")
@@ -98,7 +101,28 @@ class NetVLADMatcher(GlobalDescriptorMatcher):
 
         return [(int(i), self.reference_places[int(i)], float(scores[int(i)])) for i in idx]
 
-    def match(self, query_image: Path, potential_places: list[int] | None = None) -> int:
-        """Return the predicted place for a query image."""
-        # TODO: exact matching process
-        pass
+    def prepare_matching(self) -> None:
+        if self.superglue_verifier is None:
+            self.superglue_verifier = SuperGlueVerifier(
+                resize_max=self.config["resize_max"],
+            )
+
+    def match(self, query_image: Path, ranked_matches: list[RankedMatch] | None = None) -> VerifiedMatch | None:
+        """Verify NetVLAD candidates with SuperPoint + SuperGlue."""
+        if not ranked_matches:
+            return None
+        self.prepare_matching()
+
+        verified_matches = []
+        for candidate in ranked_matches:
+            reference_id, _, _ = candidate
+            if reference_id >= len(self.reference_images):
+                continue
+            verified_matches.append(
+                self.superglue_verifier.verify(
+                    query_image=query_image,
+                    candidate=candidate,
+                    reference_image=self.reference_images[reference_id],
+                )
+            )
+        return best_verified_match(verified_matches)
