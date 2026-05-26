@@ -1,7 +1,11 @@
 from abc import ABC, abstractmethod
 from pathlib import Path
+from typing import Any
+
 import numpy as np
 import cv2 as cv
+
+from .verification import RankedMatch, VerifiedMatch
 
 
 class ImageMatcher(ABC):
@@ -11,17 +15,17 @@ class ImageMatcher(ABC):
         pass
 
     @abstractmethod
-    def match(self, query_image: Path, potential_places: list[int]) -> int:
-        """Return the predicted place for a query image."""
+    def match(self, query_image: Path, ranked_matches: list[RankedMatch]) -> VerifiedMatch | None:
+        """Return the verified match for a query image from retrieved candidates."""
         pass
 
     @abstractmethod
-    def query(self, query_image: Path, top_k: int = 5) -> list[tuple[int, int, float]]:
+    def query(self, query_image: Path, top_k: int = 5) -> list[RankedMatch]:
         """Return ranked DBoW2 matches for a query image."""
         pass
 
     @abstractmethod
-    def set_reference_database(self, reference_images: list[Path], reference_places: list[int]) -> list:
+    def set_reference_database(self, reference_images: list[Path], reference_places: list[Any]) -> list:
         """Extract/index features for the reference images."""
         pass
 

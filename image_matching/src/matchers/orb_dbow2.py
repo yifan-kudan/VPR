@@ -1,10 +1,15 @@
 from pathlib import Path
+
 import numpy as np
 import cv2 as cv
+
 from .dbow2_base import DBoW2MatcherBase
 from bindings import dbow2_cpp
 
 class ORBDBoW2Matcher(DBoW2MatcherBase):
+    feature_extractor = "orb"
+    matcher_norm = cv.NORM_HAMMING
+
     def __init__(self, nfeatures: int = 1000, grid_size: tuple[int, int] = (4, 4), k: int = 9, L: int = 3, debug: bool = False, vocabulary_path: Path | None = None):
         """Initialize the ORB DBoW2 matcher."""
         """nfeatures: total number of ORB features to extract per image (divided into 4x4 grid)"""
@@ -14,14 +19,12 @@ class ORBDBoW2Matcher(DBoW2MatcherBase):
         """vocabulary_path: pre-trained vocabulary path, if None, create a new one using reference images"""
         self.nfeatures = nfeatures
         self.grid_size = grid_size
-        self.vocabulary_path = Path(vocabulary_path) if vocabulary_path is not None else None
 
         self.orb = cv.ORB_create(nfeatures=nfeatures // (grid_size[0] * grid_size[1]))
-        self.reference_images = []
-        self.reference_places = []
-
-        self.db = dbow2_cpp.OrbDatabase(k=k, L=L)
-        self.is_built = False
+        super().__init__(
+            dbow2_cpp.OrbDatabase(k=k, L=L),
+            Path(vocabulary_path) if vocabulary_path is not None else None,
+        )
 
 
     def extract_features_descriptors(self, image: Path) -> tuple[list[cv.KeyPoint], np.ndarray | None]:

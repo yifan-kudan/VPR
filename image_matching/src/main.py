@@ -8,7 +8,7 @@ from matchers.kornia_sift_dbow2 import KorniaSiftDBoW2Matcher
 from matchers.superpoint_dbow2 import SuperPointDBoW2Matcher
 from matchers.netvlad import NetVLADMatcher
 
-# main.py lives at <repo>/retrieval/src/main.py
+# main.py lives at <repo>/image_matching/src/main.py
 DEFAULT_PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -35,7 +35,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--top-k",
         type=int,
-        default=1,
+        default=5,
         help="Number of top matches to retrieve.",
     )
     parser.add_argument(
@@ -67,11 +67,11 @@ def main() -> None:
         "resize_max": args.netvlad_resize_max,
     }
 
-    csv_path = project_root / "retrieval/data/images/converted_jpeg/labels_refined.csv"
+    csv_path = project_root / "image_matching/data/images/converted_jpeg/labels_refined.csv"
     suffix = f"{algorithm_name}_{'' if not is_pretrained_vocabulary else 'pretrained'}_ref_{n_references}_top_{top_k}"
-    false_match_image_path = f"retrieval/results/false_matches_{suffix}"
-    match_details_path = f"retrieval/results/match_details_{suffix}.csv"
-    confusion_matrix_path = f"retrieval/results/confusion_matrix_{suffix}.png"
+    false_match_image_path = f"image_matching/results/false_matches_{suffix}"
+    match_details_path = f"image_matching/results/match_details_{suffix}.csv"
+    confusion_matrix_path = f"image_matching/results/confusion_matrix_{suffix}.png"
 
     dataset = load_retrieval_dataset(csv_path, project_root=project_root, n_references=n_references)
     image_records = {r.image: r for r in dataset.queries}
@@ -89,7 +89,13 @@ def main() -> None:
 
     evaluation = evaluate_dataset(matcher, dataset, top_k=top_k)
 
-    print(f"Accuracy: {evaluation.accuracy:.4f}")
+    print(f"Retrieval top-1 accuracy: {evaluation.retrieval_top1_accuracy:.4f}")
+    print(f"Retrieval Recall@{top_k}: {evaluation.retrieval_recall_at_k:.4f}")
+    print(f"Matching accuracy: {evaluation.matching_accuracy:.4f}")
+    print(f"Matching success rate: {evaluation.matching_success_rate:.4f}")
+    print(f"Mean raw matches: {evaluation.mean_raw_matches:.2f}")
+    print(f"Mean RANSAC inliers: {evaluation.mean_inliers:.2f}")
+    print(f"Mean inlier ratio: {evaluation.mean_inlier_ratio:.4f}")
     print_false_matches(evaluation)
 
     saved_paths = save_false_match_images(

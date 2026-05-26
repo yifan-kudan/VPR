@@ -1,26 +1,28 @@
 from pathlib import Path
+
 import numpy as np
 import cv2 as cv
 import torch
-import kornia.feature as KF
+
 from .dbow2_base import DBoW2MatcherBase
 from bindings import dbow2_cpp
 
+import kornia.feature as KF
 
 class KorniaSiftDBoW2Matcher(DBoW2MatcherBase):
     feature_extractor = "sift"
+    matcher_norm = cv.NORM_L2
 
     def __init__(self, nfeatures: int = 1000, rootsift: bool = True, k: int = 9, L: int = 3, resize_max: int = 1024, vocabulary_path: Path | None = None):
-        self.vocabulary_path = Path(vocabulary_path) if vocabulary_path is not None else None
-        self.reference_images = []
-        self.reference_places = []
         self.resize_max = resize_max
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.sift = KF.SIFTFeature(num_features=nfeatures, rootsift=rootsift, device=self.device).eval()
 
-        self.db = dbow2_cpp.SiftDatabase(k=k, L=L)
-        self.is_built = False
+        super().__init__(
+            dbow2_cpp.SiftDatabase(k=k, L=L),
+            Path(vocabulary_path) if vocabulary_path is not None else None,
+        )
 
 
     def extract_features_descriptors(self, image: Path) -> tuple[list[cv.KeyPoint], np.ndarray | None]:

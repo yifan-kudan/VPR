@@ -9,11 +9,39 @@ conda env create -f environment.yaml
 conda activate img_matching
 ```
 
+This project also uses Hierarchical-Localization (`hloc`) for SIFT,
+SuperPoint, SuperGlue, and NetVLAD components. Install it separately after
+activating the environment. In `external_repositores`:
+
+```bash
+git clone --recursive https://github.com/cvg/Hierarchical-Localization.git
+cd Hierarchical-Localization
+pip install -e .
+```
+
+## Feature Extractor
+
+ORB, SIFT, SuperPoint are selected to extract features and descriptors
+
+### ORB
+
+ORB matching method is realized based on opencv
+
+### SIFT
+
+CPU version is based on the DoG extractor repository<a href="https://github.com/cvg/Hierarchical-Localization/blob/master/hloc/extractors/dog.py">Hierarchical-Localization</a>
+
+GPU version is depends on Kornia.
+
+### SuperPoint
+
+It is based on the repository<a href="https://github.com/cvg/Hierarchical-Localization/blob/master/hloc/extractors/superpoint.py">Hierarchical-Localization</a> The SuperPoint uses a pre-trained model from <a herf="https://github.com/magicleap/SuperGluePretrainedNetwork/tree/ddcf11f42e7e0732a0c4607648f9448ea8d73590">SuperGluePretrainedNetwork</a>
+
 ## Retrieval
 
-### Data Processing
+## Data Processing
 
-The image data is located under `VPR/retrieval/data/`.
+The image data is located under `VPR/image_matching/data/`.
 
 Currently provide a method to convert `.HEIC` photos into `.jpg`.
 
@@ -36,21 +64,10 @@ There's no place label at first, but will be labeled according to scenario by `l
 
 ```csv
 image,direction,light,weather,indoor,construction,place
-VPR/retrieval/data/images/converted_jpeg/IMG_3735.jpg,forward,day,sun,indoor,none,0
+VPR/image_matching/data/images/converted_jpeg/IMG_3735.jpg,forward,day,sun,indoor,none,0
 ```
-### ORB Matching
 
-ORB matching method is realized based on opencv
-
-### SIFT Matching
-
-It is based on the DoG extractor repository<a href="https://github.com/cvg/Hierarchical-Localization/blob/master/hloc/extractors/dog.py">Hierarchical-Localization</a>
-
-### SuperPoint Matching
-
-It is based on the repository<a href="https://github.com/cvg/Hierarchical-Localization/blob/master/hloc/extractors/superpoint.py">Hierarchical-Localization</a> The SuperPoint uses a pre-trained model from <a herf="https://github.com/magicleap/SuperGluePretrainedNetwork/tree/ddcf11f42e7e0732a0c4607648f9448ea8d73590">SuperGluePretrainedNetwork</a>
-
-### NetVLAD Matching
+### NetVLAD
 
 Based on the repository<a href="https://github.com/cvg/Hierarchical-Localization/blob/master/hloc/extractors/superpoint.py">Hierarchical-Localization</a> It is pretrained.
 
@@ -63,20 +80,17 @@ cd external_repositories
 git clone https://github.com/dorian3d/DBoW2.git
 ```
 
-`VPR/retrieval/bindings/dbow2_pybind.cpp` is the binding to allow pyhton call the C++ functions.
+`VPR/image_matching/bindings/dbow2_pybind.cpp` is the binding to allow pyhton call the C++ functions.
 
-### Evaluation
+## Feature Matching
 
-The output will be saved into `VPR/retrieval/results/`
+KNN based brut fore method to match features between top K predicted images, then use RANSAC to verify the features, to select the best matching.
+
+## Evaluation
+
+The output will be saved into `VPR/image_matching/results/`
 
 Currently, the image pair of false matches will be saved into the `false_matches`
 
 And a jupyter notebook is provided for more convenient result analysis.
 
-## TODO:
-
-- More detailed output of the evaluation
-  - <del>Confusion matrix</del>
-  - Accuracy, Precision, Recall, F1-Score, CPU usage, Memory usage, Time consuming
-- <del>Implement the SIFT + DBoW2 + SueprPoint</del>
-- Implement the NetVlad

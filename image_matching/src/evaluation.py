@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 
 from data_loader import RetrievalDataset, ImageRecord
 from matchers.matcher import GlobalDescriptorMatcher, LocalFeatureMatcher
+from matchers.verification import VerifiedMatch
 
 from tqdm import tqdm
 
@@ -20,36 +21,78 @@ RankedMatch = tuple[int, Any, float]
 class MatchResult:
     query_image: Path
     true_place: Any
-    predicted_place: Any
+    retrieval_top1_place: Any
+    retrieval_top1_score: float | None
+    retrieval_hit_at_k: bool
+    matched_place: Any
     matched_reference_image: Path | None
-    correct: bool
+    matching_correct: bool
+    verified_match: VerifiedMatch | None
     ranked_matches: list[RankedMatch]
 
 
 @dataclass(frozen=True)
 class EvaluationResult:
-    accuracy: float
+    retrieval_top1_accuracy: float
+    retrieval_recall_at_k: float
+    matching_accuracy: float
+    matching_success_rate: float
+    mean_raw_matches: float
+    mean_inliers: float
+    mean_inlier_ratio: float
     results: list[MatchResult]
 
 
-def query_matcher(matcher, query_image: Path, top_k: int) -> tuple[Any, list[RankedMatch]]:
+def query_matcher(matcher, query_image: Path, top_k: int) -> list[RankedMatch]:
 
     ranked_matches = matcher.query(query_image, top_k=top_k)
-    predicted_place = ranked_matches[0][1] if ranked_matches else None
-    return predicted_place, ranked_matches
+    return ranked_matches
 
 
-def matched_reference_image(matcher, ranked_matches: list[RankedMatch]) -> Path | None:
-    if not ranked_matches or not hasattr(matcher, "reference_images"):
+def retrieval_top1_place(ranked_matches: list[RankedMatch]) -> Any:
+    return ranked_matches[0][1] if ranked_matches else None
+
+
+def retrieval_top1_score(ranked_matches: list[RankedMatch]) -> float | None:
+    return ranked_matches[0][2] if ranked_matches else None
+
+
+def retrieval_hit_at_k(ranked_matches: list[RankedMatch], true_place: Any) -> bool:
+    return any(place == true_place for _, place, _ in ranked_matches)
+
+
+def matched_reference_image(verified_match: VerifiedMatch | None) -> Path | None:
+    if verified_match is None:
         return None
-
-    reference_id = ranked_matches[0][0]
-    return matcher.reference_images[reference_id]
+    return verified_match.reference_image
 
 
-def accuracy_calculation(results: list[MatchResult]) -> float:
-    accuracy = sum(result.correct for result in results) / len(results) if results else 0.0
-    return accuracy
+def safe_mean(values: list[float]) -> float:
+    return float(np.mean(values)) if values else 0.0
+
+
+def evaluation_metrics(results: list[MatchResult]) -> dict[str, float]:
+    if not results:
+        return {
+            "retrieval_top1_accuracy": 0.0,
+            "retrieval_recall_at_k": 0.0,
+            "matching_accuracy": 0.0,
+            "matching_success_rate": 0.0,
+            "mean_raw_matches": 0.0,
+            "mean_inliers": 0.0,
+            "mean_inlier_ratio": 0.0,
+        }
+
+    verified_matches = [result.verified_match for result in results if result.verified_match is not None]
+    return {
+        "retrieval_top1_accuracy": sum(result.retrieval_top1_place == result.true_place for result in results) / len(results),
+        "retrieval_recall_at_k": sum(result.retrieval_hit_at_k for result in results) / len(results),
+        "matching_accuracy": sum(result.matching_correct for result in results) / len(results),
+        "matching_success_rate": sum(match.num_raw_matches > 0 for match in verified_matches) / len(results),
+        "mean_raw_matches": safe_mean([float(match.num_raw_matches) for match in verified_matches]),
+        "mean_inliers": safe_mean([float(match.num_inliers) for match in verified_matches]),
+        "mean_inlier_ratio": safe_mean([float(match.inlier_ratio) for match in verified_matches]),
+    }
 
 
 def evaluate_dataset(
@@ -59,6 +102,10 @@ def evaluate_dataset(
 ) -> EvaluationResult:
     """Build references from the dataset and evaluate its queries."""
     matcher.set_reference_database(dataset.reference_images, dataset.reference_places)
+    
+    # prepare verifier first to avoid progress bar out of alignment
+    if hasattr(matcher, "prepare_matching"):
+        matcher.prepare_matching()
 
     results = []
     query_pairs = tqdm(
@@ -68,20 +115,33 @@ def evaluate_dataset(
     )
     
     for query_image, true_place in query_pairs:
-        predicted_place, ranked_matches = query_matcher(matcher, query_image, top_k)
+        ranked_matches = query_matcher(matcher, query_image, top_k)
+        verified_match = matcher.match(query_image, ranked_matches)
+        matched_place = verified_match.place if verified_match is not None else None
         results.append(
             MatchResult(
                 query_image=query_image,
                 true_place=true_place,
-                predicted_place=predicted_place,
-                matched_reference_image=matched_reference_image(matcher, ranked_matches),
-                correct=predicted_place == true_place,
+                retrieval_top1_place=retrieval_top1_place(ranked_matches),
+                retrieval_top1_score=retrieval_top1_score(ranked_matches),
+                retrieval_hit_at_k=retrieval_hit_at_k(ranked_matches, true_place),
+                matched_place=matched_place,
+                matched_reference_image=matched_reference_image(verified_match),
+                matching_correct=matched_place == true_place,
+                verified_match=verified_match,
                 ranked_matches=ranked_matches,
             )
         )
 
+    metrics = evaluation_metrics(results)
     return EvaluationResult(
-        accuracy=accuracy_calculation(results),
+        retrieval_top1_accuracy=metrics["retrieval_top1_accuracy"],
+        retrieval_recall_at_k=metrics["retrieval_recall_at_k"],
+        matching_accuracy=metrics["matching_accuracy"],
+        matching_success_rate=metrics["matching_success_rate"],
+        mean_raw_matches=metrics["mean_raw_matches"],
+        mean_inliers=metrics["mean_inliers"],
+        mean_inlier_ratio=metrics["mean_inlier_ratio"],
         results=results,
     )
 
@@ -89,7 +149,7 @@ def evaluate_dataset(
 def print_false_matches(evaluation: EvaluationResult) -> None:
     """Print query/reference image pairs for incorrect retrievals."""
     for result in evaluation.results:
-        if result.correct:
+        if result.matching_correct:
             continue
 
         print(
@@ -97,7 +157,8 @@ def print_false_matches(evaluation: EvaluationResult) -> None:
             f"query={result.query_image} "
             f"matched_reference={result.matched_reference_image} "
             f"true_place={result.true_place} "
-            f"predicted_place={result.predicted_place}"
+            f"matched_place={result.matched_place} "
+            f"retrieval_top1_place={result.retrieval_top1_place}"
         )
 
 
@@ -112,7 +173,7 @@ def image_with_keypoints(matcher, image_path: Path):
     if not hasattr(matcher, "extract_features_descriptors"):
         return image
 
-    keypoints, _descriptors = matcher.extract_features_descriptors(image_path)
+    keypoints, _ = matcher.extract_features_descriptors(image_path)
     return cv.drawKeypoints(
         image,
         keypoints,
@@ -155,14 +216,20 @@ def save_match_details(
 
     rows = []
     for result in evaluation.results:
-        top_score = result.ranked_matches[0][2] if result.ranked_matches else None
+        verified_match = result.verified_match
         row: dict[str, Any] = {
             "query_image": result.query_image,
             "true_place": result.true_place,
-            "predicted_place": result.predicted_place,
-            "correct": result.correct,
-            "top_score": top_score,
+            "retrieval_top1_place": result.retrieval_top1_place,
+            "retrieval_top1_score": result.retrieval_top1_score,
+            "retrieval_hit_at_k": result.retrieval_hit_at_k,
+            "matched_place": result.matched_place,
+            "matching_correct": result.matching_correct,
             "matched_reference_image": result.matched_reference_image,
+            "verification_score": verified_match.verification_score if verified_match is not None else None,
+            "num_raw_matches": verified_match.num_raw_matches if verified_match is not None else None,
+            "num_inliers": verified_match.num_inliers if verified_match is not None else None,
+            "inlier_ratio": verified_match.inlier_ratio if verified_match is not None else None,
         }
         if image_records is not None:
             rec = image_records.get(result.query_image)
@@ -190,17 +257,17 @@ def save_confusion_matrix(
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     true_places = sorted(set(r.true_place for r in evaluation.results))
-    pred_places = sorted(set(r.predicted_place for r in evaluation.results if r.predicted_place is not None))
+    pred_places = sorted(set(r.matched_place for r in evaluation.results if r.matched_place is not None))
     all_places = sorted(set(true_places) | set(pred_places))
     place_to_idx = {p: i for i, p in enumerate(all_places)}
 
     n = len(all_places)
     matrix = np.zeros((n, n), dtype=int)
     for result in evaluation.results:
-        if result.predicted_place is None:
+        if result.matched_place is None:
             continue
         true_idx = place_to_idx[result.true_place]
-        pred_idx = place_to_idx.get(result.predicted_place)
+        pred_idx = place_to_idx.get(result.matched_place)
         if pred_idx is not None:
             matrix[true_idx, pred_idx] += 1
 
@@ -216,7 +283,7 @@ def save_confusion_matrix(
     ax.set_yticklabels(all_places, fontsize=tick_font)
     ax.set_xlabel("Predicted place")
     ax.set_ylabel("True place")
-    ax.set_title(f"Confusion Matrix  —  Accuracy {evaluation.accuracy:.4f}")
+    ax.set_title(f"Confusion Matrix  —  Matching Accuracy {evaluation.matching_accuracy:.4f}")
 
     if n <= 40:
         for i in range(n):
@@ -242,7 +309,7 @@ def save_false_match_images(
     output_dir.mkdir(parents=True, exist_ok=True)
 
     saved_paths = []
-    false_results = [result for result in evaluation.results if not result.correct]
+    false_results = [result for result in evaluation.results if not result.matching_correct]
 
     iterator = false_results
     if tqdm is not None:
@@ -260,11 +327,11 @@ def save_false_match_images(
         reference_image = resize_to_height(reference_image, height)
 
         query_image = add_label(query_image, f"Query true={result.true_place}")
-        reference_image = add_label(reference_image, f"Matched predicted={result.predicted_place}")
+        reference_image = add_label(reference_image, f"Matched predicted={result.matched_place}")
 
         pair_image = cv.hconcat([query_image, reference_image])
         output_path = output_dir / (
-            f"false_match_{index:04d}_true_{result.true_place}_pred_{result.predicted_place}.jpg"
+            f"false_match_{index:04d}_true_{result.true_place}_pred_{result.matched_place}.jpg"
         )
 
         cv.imwrite(output_path.as_posix(), pair_image)
